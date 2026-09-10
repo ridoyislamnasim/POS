@@ -10,18 +10,18 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-type Activity = { id: string; action: string; entityType: string; time: string };
+type Note = { id: string; title: string; isRead: boolean; createdAt: string };
 
 export function TopBar({
   title,
   userName,
-  canActivity,
+  canNotify,
   onMenu,
   onSignOut,
 }: {
   title: string;
   userName?: string;
-  canActivity?: boolean;
+  canNotify?: boolean;
   onMenu: () => void;
   onSignOut: () => void;
 }) {
@@ -38,13 +38,18 @@ export function TopBar({
     .slice(0, 2)
     .toUpperCase();
 
-  const activity = useQuery({
-    queryKey: ["header-activity"],
-    queryFn: () => api<Activity[]>("/api/v1/dashboard/activity"),
-    enabled: !!canActivity,
+  const unread = useQuery({
+    queryKey: ["notif-unread"],
+    queryFn: () => api<{ count: number }>("/api/v1/extras/notifications/unread-count"),
+    enabled: !!canNotify,
   });
-
-  const notes = activity.data ?? [];
+  const recent = useQuery({
+    queryKey: ["notif-recent"],
+    queryFn: () => api<Note[]>("/api/v1/extras/notifications/recent"),
+    enabled: !!canNotify,
+  });
+  const notes = recent.data ?? [];
+  const unreadCount = unread.data?.count ?? 0;
 
   function onSearch(e: FormEvent) {
     e.preventDefault();
@@ -95,21 +100,24 @@ export function TopBar({
             onClick={() => setMenu(menu === "note" ? null : "note")}
           >
             <Bell className="h-4 w-4 text-primary" />
-            {notes.length > 0 ? (
-              <Badge className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center p-0 text-[10px]" variant="destructive">
-                {Math.min(9, notes.length)}
+            {unreadCount > 0 ? (
+              <Badge className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]" variant="destructive">
+                {unreadCount > 9 ? "9+" : unreadCount}
               </Badge>
             ) : null}
           </Button>
           {menu === "note" ? (
             <div className="absolute right-0 mt-2 w-72 rounded-md border bg-popover p-2 text-sm shadow-md">
-              <div className="px-2 py-1 text-xs font-semibold">Activity</div>
-              {notes.length === 0 ? <div className="px-2 py-3 text-muted-foreground">No recent activity</div> : null}
+              <div className="px-2 py-1 text-xs font-semibold">Notifications</div>
+              {notes.length === 0 ? <div className="px-2 py-3 text-muted-foreground">No notifications</div> : null}
               {notes.slice(0, 6).map((n) => (
-                <div key={n.id} className="rounded px-2 py-1.5 hover:bg-accent">
-                  {n.action} <span className="text-muted-foreground">{n.entityType}</span>
+                <div key={n.id} className={`rounded px-2 py-1.5 hover:bg-accent ${n.isRead ? "" : "font-medium"}`}>
+                  {n.title}
                 </div>
               ))}
+              <button type="button" className="mt-1 block w-full rounded px-2 py-1.5 text-left text-xs text-primary" onClick={() => router.push("/notifications")}>
+                View all notifications
+              </button>
             </div>
           ) : null}
         </div>

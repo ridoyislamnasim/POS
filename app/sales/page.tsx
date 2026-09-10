@@ -1,13 +1,30 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, downloadDocument, printDocument } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
-import { Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow } from "@/components/ui";
-import { toastError } from "@/lib/toast";
+import { ListFrame } from "@/components/ui/list-frame";
+import {
+  Button,
+  PageHeader,
+  StatusBadge,
+  SummaryCards,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  tableCellActions,
+  tableCellNumeric,
+  tableSubText,
+} from "@/components/ui";
+import { DocumentActions } from "@/components/documents/document-actions";
+import { moneyText, sumField } from "@/components/erp-page";
 
 type Sale = {
   id: string;
@@ -15,7 +32,9 @@ type Sale = {
   total: string;
   currency: string;
   createdAt: string;
+  status: string;
   branch: { name: string };
+  customer?: { name: string; phone: string } | null;
 };
 
 type Me = { permissions: string[] };
@@ -26,50 +45,83 @@ export default function SalesPage() {
   useEffect(() => {
     if (me.isError) router.replace("/login");
   }, [me.isError, router]);
-  const sales = useQuery({
-    queryKey: ["sales"],
-    queryFn: () => api<Sale[]>("/api/v1/sales?limit=100"),
-    enabled: me.isSuccess,
-  });
-  const { rows, pager } = usePagedRows(sales.data ?? []);
+  const list = useServerList<Sale>("sales", "/api/v1/sales", { enabled: me.isSuccess });
+
   return (
     <AppShell>
-      <PageHeader title="Sales" description="Tickets from this tenant." />
-      {sales.isLoading ? <Skeleton rows={8} /> : null}
-      {sales.isError ? <ErrorState message={(sales.error as Error).message} onRetry={() => sales.refetch()} /> : null}
-      {!sales.isLoading && !sales.data?.length ? <EmptyState title="No sales yet" /> : null}
-      <div className="rounded-lg border bg-card shadow-sm">
-        <Table>
+      <PageHeader title="Sales" description="Tickets from this tenant. Open an invoice to return, refund, exchange, or void." />
+      <SummaryCards
+        items={[
+          { label: "Invoices", value: list.pager.total, accent: "orange" },
+          { label: "Total", value: moneyText(sumField(list.rows, "total")), accent: "emerald", description: "This page" },
+          { label: "Completed", value: list.rows.filter((s) => s.status === "COMPLETED").length, accent: "lime" },
+        ]}
+      />
+      <ListFrame
+        list={list}
+        searchPlaceholder="Search invoice or customer"
+        dateFilter
+        statusOptions={[
+          { value: "COMPLETED", label: "Completed" },
+          { value: "DRAFT", label: "Draft" },
+          { value: "VOIDED", label: "Voided" },
+          { value: "PARTIALLY_RETURNED", label: "Partial return" },
+          { value: "FULLY_RETURNED", label: "Fully returned" },
+        ]}
+        columnCount={6}
+        emptyTitle="No records found"
+        emptyHint="Completed tickets from POS appear here."
+      >
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow>
               <TableHead>Invoice</TableHead>
+              <TableHead>Customer</TableHead>
               <TableHead>Branch</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead />
+              <TableHead>Status</TableHead>
+              <TableHead className={tableCellNumeric}>Total</TableHead>
+              <TableHead className="w-[1%]" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((s) => (
+            {list.rows.map((s) => (
               <TableRow key={s.id}>
-                <TableCell className="font-medium">{s.invoiceNumber}</TableCell>
+                <TableCell className="font-medium">
+                  <Link className="underline-offset-2 hover:underline" href={`/sales/${s.id}`}>
+                    {s.invoiceNumber}
+                  </Link>
+                  <div className={tableSubText}>{new Date(s.createdAt).toLocaleString()}</div>
+                </TableCell>
+                <TableCell>
+                  {s.customer ? (
+                    <div>
+                      <div className="leading-tight">{s.customer.name}</div>
+                      <div className={tableSubText}>{s.customer.phone}</div>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Walk-in</span>
+                  )}
+                </TableCell>
                 <TableCell>{s.branch.name}</TableCell>
-                <TableCell className="tabular-nums">
+                <TableCell>
+                  <StatusBadge value={s.status} />
+                </TableCell>
+                <TableCell className={tableCellNumeric}>
                   {s.currency} {Number(s.total).toFixed(2)}
                 </TableCell>
-                <TableCell className="space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => printDocument(s.id, "bill").catch((e) => toastError(e, "Print failed"))}>
-                    Print bill
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => downloadDocument(s.id, "invoice").catch((e) => toastError(e, "Download failed"))}>
-                    Invoice PDF
-                  </Button>
+                <TableCell className={tableCellActions}>
+                  <div className="btn-group inline-flex flex-wrap justify-end gap-0.5">
+                    <Button variant="outline" size="xs" onClick={() => router.push(`/sales/${s.id}`)}>
+                      Open
+                    </Button>
+                    <DocumentActions type="sale" id={s.id} number={s.invoiceNumber} />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+      </ListFrame>
     </AppShell>
   );
 }

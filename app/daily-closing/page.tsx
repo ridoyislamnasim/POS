@@ -1,12 +1,14 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useMe } from "@/lib/auth";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
-import { Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, inputClass, EmptyState, Kpi } from "@/components/ui";
+import { ListFrame } from "@/components/ui/list-frame";
+import { Button, PageHeader, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellNumeric } from "@/components/ui";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { moneyCell } from "@/components/erp-page";
 
@@ -21,35 +23,38 @@ type Close = {
 
 export default function DailyClosingPage() {
   const { me } = useMe();
-  const list = useQuery({ queryKey: ["closing"], queryFn: () => api<Close[]>("/api/v1/finance/daily-closing") });
+  const list = useServerList<Close>("closing", "/api/v1/finance/daily-closing");
   const [form, setForm] = useState({ branchId: "", countedCash: "", openingCash: "0" });
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const save = useMutation({
     mutationFn: () => api("/api/v1/finance/daily-closing", { method: "POST", body: JSON.stringify(form) }),
     onSuccess: () => {
       toastSuccess("Day closed");
+      setConfirmOpen(false);
       list.refetch();
     },
     onError: (e) => toastError(e, "Close failed"),
   });
-  const last = list.data?.[0];
-  const { rows, pager } = usePagedRows(list.data);
+  const last = list.rows[0];
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    save.mutate();
+    setConfirmOpen(true);
   }
 
   return (
     <AppShell>
       <PageHeader title="Daily Closing" description="Count cash and lock the business date for a branch." />
       {last ? (
-        <div className="mb-4 grid gap-4 sm:grid-cols-3">
-          <Kpi label="Expected" value={`৳ ${Number(last.expectedCash).toFixed(2)}`} />
-          <Kpi label="Counted" value={`৳ ${Number(last.countedCash).toFixed(2)}`} />
-          <Kpi label="Variance" value={`৳ ${Number(last.variance).toFixed(2)}`} tone={Number(last.variance) ? "warning" : "increase"} />
-        </div>
+        <SummaryCards
+          items={[
+            { label: "Expected", value: `৳ ${Number(last.expectedCash).toFixed(2)}`, accent: "sky" },
+            { label: "Counted", value: `৳ ${Number(last.countedCash).toFixed(2)}`, accent: "emerald" },
+            { label: "Variance", value: `৳ ${Number(last.variance).toFixed(2)}`, accent: Number(last.variance) ? "amber" : "lime" },
+          ]}
+        />
       ) : null}
-      <form className="mb-4 grid gap-2 rounded-lg border bg-card p-4 md:grid-cols-4" onSubmit={onSubmit}>
+      <form className="mb-3 grid gap-2 rounded-md border bg-card p-2 md:grid-cols-4 md:p-3" onSubmit={onSubmit}>
         <select className={inputClass} required value={form.branchId} onChange={(e) => setForm((s) => ({ ...s, branchId: e.target.value }))}>
           <option value="">Branch</option>
           {(me?.branches ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -58,32 +63,40 @@ export default function DailyClosingPage() {
         <input className={inputClass} type="number" placeholder="Counted cash" required value={form.countedCash} onChange={(e) => setForm((s) => ({ ...s, countedCash: e.target.value }))} />
         <Button type="submit">Close day</Button>
       </form>
-      {!list.data?.length ? <EmptyState title="No closings yet" /> : null}
-      <div className="rounded-lg border bg-card">
+      <ListFrame list={list} searchPlaceholder="Search branch" dateFilter columnCount={5} emptyTitle="No records found">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
               <TableHead>Branch</TableHead>
-              <TableHead>Expected</TableHead>
-              <TableHead>Counted</TableHead>
-              <TableHead>Variance</TableHead>
+              <TableHead className={tableCellNumeric}>Expected</TableHead>
+              <TableHead className={tableCellNumeric}>Counted</TableHead>
+              <TableHead className={tableCellNumeric}>Variance</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => (
+            {list.rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell>{String(r.businessDate).slice(0, 10)}</TableCell>
                 <TableCell>{r.branch?.name}</TableCell>
-                <TableCell>{moneyCell(r.expectedCash)}</TableCell>
-                <TableCell>{moneyCell(r.countedCash)}</TableCell>
-                <TableCell>{moneyCell(r.variance)}</TableCell>
+                <TableCell className={tableCellNumeric}>{moneyCell(r.expectedCash)}</TableCell>
+                <TableCell className={tableCellNumeric}>{moneyCell(r.countedCash)}</TableCell>
+                <TableCell className={tableCellNumeric}>{moneyCell(r.variance)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+      </ListFrame>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Close this business day?"
+        description="Counted cash is locked for this branch date. You can overwrite by running close again."
+        confirmLabel="Close day"
+        variant="warning"
+        loading={save.isPending}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => save.mutate()}
+      />
     </AppShell>
   );
 }

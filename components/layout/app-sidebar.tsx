@@ -3,9 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen, Sparkles, Store, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { filterNavGroups, type NavGroup, type NavItem, type NavTone } from "@/lib/nav-config";
+import { groupBlurb, helpBlurbFor } from "@/lib/help";
+import {
+  SIDEBAR_WIDTH_COLLAPSED_PX,
+  SIDEBAR_WIDTH_EXPANDED_PX,
+  SIDEBAR_WIDTH_MOBILE_PX,
+  sidebarHover,
+  sidebarTransition,
+} from "@/lib/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { SidebarTooltip } from "@/components/ui/sidebar-tooltip";
 
@@ -25,132 +34,111 @@ const TONES: Record<
     line: string;
   }
 > = {
-  sky: {
-    chip: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
-    active: "bg-sky-600 text-white shadow-sm shadow-sky-200 ring-1 ring-sky-600",
-    bar: "bg-sky-600",
-    child: "hover:bg-sky-50 hover:text-sky-800",
-    childOn: "bg-sky-50 font-medium text-sky-900",
-    childChip: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
-    childChipOn: "bg-sky-600 text-white ring-1 ring-sky-600",
-    tip: "from-sky-500 to-blue-600",
-    line: "border-sky-200",
-  },
   emerald: {
-    chip: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    active: "bg-emerald-600 text-white shadow-sm shadow-emerald-200 ring-1 ring-emerald-600",
-    bar: "bg-emerald-600",
-    child: "hover:bg-emerald-50 hover:text-emerald-800",
-    childOn: "bg-emerald-50 font-medium text-emerald-900",
-    childChip: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+    chip: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:ring-emerald-800",
+    active: "bg-emerald-600 text-white shadow-sm shadow-emerald-200 ring-1 ring-emerald-600 dark:shadow-none dark:bg-emerald-500",
+    bar: "bg-emerald-600 dark:bg-emerald-400",
+    child: "hover:bg-emerald-50 hover:text-emerald-800 dark:hover:bg-emerald-950/60 dark:hover:text-emerald-200",
+    childOn: "bg-emerald-50 font-medium text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-100",
+    childChip: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:ring-emerald-800",
     childChipOn: "bg-emerald-600 text-white ring-1 ring-emerald-600",
     tip: "from-emerald-500 to-teal-600",
-    line: "border-emerald-200",
+    line: "border-emerald-200 dark:border-emerald-800",
   },
   amber: {
-    chip: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
-    active: "bg-amber-500 text-amber-950 shadow-sm shadow-amber-200 ring-1 ring-amber-500",
+    chip: "bg-amber-50 text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/70 dark:text-amber-200 dark:ring-amber-800",
+    active: "bg-amber-500 text-amber-950 shadow-sm shadow-amber-200 ring-1 ring-amber-500 dark:shadow-none dark:text-amber-950",
     bar: "bg-amber-500",
-    child: "hover:bg-amber-50 hover:text-amber-900",
-    childOn: "bg-amber-50 font-medium text-amber-950",
-    childChip: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+    child: "hover:bg-amber-50 hover:text-amber-900 dark:hover:bg-amber-950/60 dark:hover:text-amber-100",
+    childOn: "bg-amber-50 font-medium text-amber-950 dark:bg-amber-950/80 dark:text-amber-100",
+    childChip: "bg-amber-50 text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/70 dark:text-amber-200 dark:ring-amber-800",
     childChipOn: "bg-amber-500 text-amber-950 ring-1 ring-amber-500",
     tip: "from-amber-500 to-orange-600",
-    line: "border-amber-200",
+    line: "border-amber-200 dark:border-amber-800",
   },
   rose: {
-    chip: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
-    active: "bg-rose-600 text-white shadow-sm shadow-rose-200 ring-1 ring-rose-600",
-    bar: "bg-rose-600",
-    child: "hover:bg-rose-50 hover:text-rose-800",
-    childOn: "bg-rose-50 font-medium text-rose-900",
-    childChip: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+    chip: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/70 dark:text-rose-300 dark:ring-rose-800",
+    active: "bg-rose-600 text-white shadow-sm shadow-rose-200 ring-1 ring-rose-600 dark:shadow-none dark:bg-rose-500",
+    bar: "bg-rose-600 dark:bg-rose-400",
+    child: "hover:bg-rose-50 hover:text-rose-800 dark:hover:bg-rose-950/60 dark:hover:text-rose-200",
+    childOn: "bg-rose-50 font-medium text-rose-900 dark:bg-rose-950/80 dark:text-rose-100",
+    childChip: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/70 dark:text-rose-300 dark:ring-rose-800",
     childChipOn: "bg-rose-600 text-white ring-1 ring-rose-600",
     tip: "from-rose-500 to-pink-600",
-    line: "border-rose-200",
-  },
-  violet: {
-    chip: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
-    active: "bg-violet-600 text-white shadow-sm shadow-violet-200 ring-1 ring-violet-600",
-    bar: "bg-violet-600",
-    child: "hover:bg-violet-50 hover:text-violet-800",
-    childOn: "bg-violet-50 font-medium text-violet-900",
-    childChip: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
-    childChipOn: "bg-violet-600 text-white ring-1 ring-violet-600",
-    tip: "from-violet-500 to-purple-600",
-    line: "border-violet-200",
+    line: "border-rose-200 dark:border-rose-800",
   },
   teal: {
-    chip: "bg-teal-50 text-teal-700 ring-1 ring-teal-200",
-    active: "bg-teal-600 text-white shadow-sm shadow-teal-200 ring-1 ring-teal-600",
-    bar: "bg-teal-600",
-    child: "hover:bg-teal-50 hover:text-teal-800",
-    childOn: "bg-teal-50 font-medium text-teal-900",
-    childChip: "bg-teal-50 text-teal-700 ring-1 ring-teal-200",
+    chip: "bg-teal-50 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-950/70 dark:text-teal-300 dark:ring-teal-800",
+    active: "bg-teal-600 text-white shadow-sm shadow-teal-200 ring-1 ring-teal-600 dark:shadow-none dark:bg-teal-500",
+    bar: "bg-teal-600 dark:bg-teal-400",
+    child: "hover:bg-teal-50 hover:text-teal-800 dark:hover:bg-teal-950/60 dark:hover:text-teal-200",
+    childOn: "bg-teal-50 font-medium text-teal-900 dark:bg-teal-950/80 dark:text-teal-100",
+    childChip: "bg-teal-50 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-950/70 dark:text-teal-300 dark:ring-teal-800",
     childChipOn: "bg-teal-600 text-white ring-1 ring-teal-600",
-    tip: "from-teal-500 to-cyan-600",
-    line: "border-teal-200",
+    tip: "from-teal-500 to-emerald-600",
+    line: "border-teal-200 dark:border-teal-800",
   },
   orange: {
-    chip: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
-    active: "bg-orange-600 text-white shadow-sm shadow-orange-200 ring-1 ring-orange-600",
-    bar: "bg-orange-600",
-    child: "hover:bg-orange-50 hover:text-orange-800",
-    childOn: "bg-orange-50 font-medium text-orange-900",
-    childChip: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
+    chip: "bg-orange-50 text-orange-800 ring-1 ring-orange-200 dark:bg-orange-950/70 dark:text-orange-300 dark:ring-orange-800",
+    active: "bg-orange-600 text-white shadow-sm shadow-orange-200 ring-1 ring-orange-600 dark:shadow-none dark:bg-orange-500",
+    bar: "bg-orange-600 dark:bg-orange-400",
+    child: "hover:bg-orange-50 hover:text-orange-900 dark:hover:bg-orange-950/60 dark:hover:text-orange-100",
+    childOn: "bg-orange-50 font-medium text-orange-950 dark:bg-orange-950/80 dark:text-orange-100",
+    childChip: "bg-orange-50 text-orange-800 ring-1 ring-orange-200 dark:bg-orange-950/70 dark:text-orange-300 dark:ring-orange-800",
     childChipOn: "bg-orange-600 text-white ring-1 ring-orange-600",
-    tip: "from-orange-500 to-amber-600",
-    line: "border-orange-200",
+    tip: "from-orange-500 to-amber-500",
+    line: "border-orange-200 dark:border-orange-800",
   },
-  indigo: {
-    chip: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200",
-    active: "bg-indigo-600 text-white shadow-sm shadow-indigo-200 ring-1 ring-indigo-600",
-    bar: "bg-indigo-600",
-    child: "hover:bg-indigo-50 hover:text-indigo-800",
-    childOn: "bg-indigo-50 font-medium text-indigo-900",
-    childChip: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200",
-    childChipOn: "bg-indigo-600 text-white ring-1 ring-indigo-600",
-    tip: "from-indigo-500 to-violet-600",
-    line: "border-indigo-200",
+  lime: {
+    chip: "bg-lime-50 text-lime-800 ring-1 ring-lime-200 dark:bg-lime-950/70 dark:text-lime-300 dark:ring-lime-800",
+    active: "bg-lime-600 text-white shadow-sm shadow-lime-200 ring-1 ring-lime-600 dark:shadow-none dark:bg-lime-500",
+    bar: "bg-lime-600 dark:bg-lime-400",
+    child: "hover:bg-lime-50 hover:text-lime-900 dark:hover:bg-lime-950/60 dark:hover:text-lime-100",
+    childOn: "bg-lime-50 font-medium text-lime-950 dark:bg-lime-950/80 dark:text-lime-100",
+    childChip: "bg-lime-50 text-lime-800 ring-1 ring-lime-200 dark:bg-lime-950/70 dark:text-lime-300 dark:ring-lime-800",
+    childChipOn: "bg-lime-600 text-white ring-1 ring-lime-600",
+    tip: "from-lime-500 to-emerald-600",
+    line: "border-lime-200 dark:border-lime-800",
   },
-  cyan: {
-    chip: "bg-cyan-50 text-cyan-800 ring-1 ring-cyan-200",
-    active: "bg-cyan-600 text-white shadow-sm shadow-cyan-200 ring-1 ring-cyan-600",
-    bar: "bg-cyan-600",
-    child: "hover:bg-cyan-50 hover:text-cyan-900",
-    childOn: "bg-cyan-50 font-medium text-cyan-950",
-    childChip: "bg-cyan-50 text-cyan-800 ring-1 ring-cyan-200",
-    childChipOn: "bg-cyan-600 text-white ring-1 ring-cyan-600",
-    tip: "from-cyan-500 to-sky-600",
-    line: "border-cyan-200",
+  yellow: {
+    chip: "bg-yellow-50 text-yellow-800 ring-1 ring-yellow-200 dark:bg-yellow-950/70 dark:text-yellow-200 dark:ring-yellow-800",
+    active: "bg-yellow-500 text-yellow-950 shadow-sm shadow-yellow-200 ring-1 ring-yellow-500 dark:shadow-none",
+    bar: "bg-yellow-500",
+    child: "hover:bg-yellow-50 hover:text-yellow-900 dark:hover:bg-yellow-950/60 dark:hover:text-yellow-100",
+    childOn: "bg-yellow-50 font-medium text-yellow-950 dark:bg-yellow-950/80 dark:text-yellow-100",
+    childChip: "bg-yellow-50 text-yellow-800 ring-1 ring-yellow-200 dark:bg-yellow-950/70 dark:text-yellow-200 dark:ring-yellow-800",
+    childChipOn: "bg-yellow-500 text-yellow-950 ring-1 ring-yellow-500",
+    tip: "from-yellow-400 to-amber-500",
+    line: "border-yellow-200 dark:border-yellow-800",
   },
-  blue: {
-    chip: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-    active: "bg-blue-600 text-white shadow-sm shadow-blue-200 ring-1 ring-blue-600",
-    bar: "bg-blue-600",
-    child: "hover:bg-blue-50 hover:text-blue-800",
-    childOn: "bg-blue-50 font-medium text-blue-900",
-    childChip: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-    childChipOn: "bg-blue-600 text-white ring-1 ring-blue-600",
-    tip: "from-blue-500 to-indigo-600",
-    line: "border-blue-200",
+  stone: {
+    chip: "bg-stone-100 text-stone-700 ring-1 ring-stone-200 dark:bg-stone-900/80 dark:text-stone-300 dark:ring-stone-700",
+    active: "bg-stone-800 text-white shadow-sm shadow-stone-200 ring-1 ring-stone-800 dark:shadow-none dark:bg-stone-600",
+    bar: "bg-stone-700 dark:bg-stone-400",
+    child: "hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-stone-900/70 dark:hover:text-stone-100",
+    childOn: "bg-stone-100 font-medium text-stone-900 dark:bg-stone-900/80 dark:text-stone-100",
+    childChip: "bg-stone-100 text-stone-700 ring-1 ring-stone-200 dark:bg-stone-900/80 dark:text-stone-300 dark:ring-stone-700",
+    childChipOn: "bg-stone-800 text-white ring-1 ring-stone-800 dark:bg-stone-600",
+    tip: "from-stone-600 to-stone-800",
+    line: "border-stone-200 dark:border-stone-700",
   },
   fuchsia: {
-    chip: "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200",
-    active: "bg-fuchsia-600 text-white shadow-sm shadow-fuchsia-200 ring-1 ring-fuchsia-600",
-    bar: "bg-fuchsia-600",
-    child: "hover:bg-fuchsia-50 hover:text-fuchsia-800",
-    childOn: "bg-fuchsia-50 font-medium text-fuchsia-900",
-    childChip: "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200",
+    chip: "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200 dark:bg-fuchsia-950/70 dark:text-fuchsia-300 dark:ring-fuchsia-800",
+    active: "bg-fuchsia-600 text-white shadow-sm shadow-fuchsia-200 ring-1 ring-fuchsia-600 dark:shadow-none dark:bg-fuchsia-500",
+    bar: "bg-fuchsia-600 dark:bg-fuchsia-400",
+    child: "hover:bg-fuchsia-50 hover:text-fuchsia-800 dark:hover:bg-fuchsia-950/60 dark:hover:text-fuchsia-200",
+    childOn: "bg-fuchsia-50 font-medium text-fuchsia-900 dark:bg-fuchsia-950/80 dark:text-fuchsia-100",
+    childChip: "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200 dark:bg-fuchsia-950/70 dark:text-fuchsia-300 dark:ring-fuchsia-800",
     childChipOn: "bg-fuchsia-600 text-white ring-1 ring-fuchsia-600",
     tip: "from-fuchsia-500 to-pink-600",
-    line: "border-fuchsia-200",
+    line: "border-fuchsia-200 dark:border-fuchsia-800",
   },
 };
 
 type Props = {
   open: boolean;
   collapsed: boolean;
+  isDesktop: boolean;
   can: (p: string) => boolean;
   loading?: boolean;
   onCloseMobile: () => void;
@@ -178,9 +166,17 @@ function readOpen(): string[] | null {
   }
 }
 
-export function AppSidebar({ open, collapsed, can, loading, onCloseMobile, onToggleCollapse }: Props) {
+export function AppSidebar({ open, collapsed, isDesktop, can, loading, onCloseMobile, onToggleCollapse }: Props) {
   const pathname = usePathname();
+  const reduceMotion = useReducedMotion();
   const groups = useMemo(() => filterNavGroups(can), [can]);
+  const motionT = reduceMotion ? { duration: 0 } : sidebarTransition;
+  const sidebarWidth = isDesktop
+    ? collapsed
+      ? SIDEBAR_WIDTH_COLLAPSED_PX
+      : SIDEBAR_WIDTH_EXPANDED_PX
+    : SIDEBAR_WIDTH_MOBILE_PX;
+  const iconOnly = collapsed && isDesktop;
   const groupKey = groups.map((g) => g.title).join("|");
   const [openIds, setOpenIds] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
@@ -217,44 +213,64 @@ export function AppSidebar({ open, collapsed, can, loading, onCloseMobile, onTog
 
   return (
     <>
-      <div className={cn("fixed inset-0 z-40 bg-black/50 lg:hidden", open ? "block" : "hidden")} onClick={onCloseMobile} />
-      <aside
+      <AnimatePresence>
+        {open && !isDesktop ? (
+          <motion.button
+            key="sidebar-overlay"
+            type="button"
+            aria-label="Close menu overlay"
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={motionT}
+            onClick={onCloseMobile}
+          />
+        ) : null}
+      </AnimatePresence>
+      <motion.aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col text-slate-700 shadow-sm transition-all duration-300 ease-in-out",
-          "border-r border-slate-200 bg-gradient-to-b from-slate-50 via-white to-indigo-50",
-          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-          collapsed ? "lg:w-16" : "lg:w-72",
+          "fixed inset-y-0 left-0 z-50 flex flex-col overflow-hidden text-slate-700 shadow-sm dark:text-slate-200",
+          "border-r border-slate-200 bg-gradient-to-b from-slate-50 via-white to-orange-50/80",
+          "dark:border-slate-800 dark:from-slate-950 dark:via-slate-950 dark:to-orange-950/40 dark:shadow-none",
         )}
+        initial={false}
+        animate={{
+          width: sidebarWidth,
+          x: isDesktop || open ? 0 : -sidebarWidth,
+        }}
+        transition={motionT}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(125,211,252,0.28),transparent_38%),radial-gradient(circle_at_90%_100%,rgba(244,114,182,0.18),transparent_36%)]" />
-        <div className="relative flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/60 px-3 backdrop-blur-sm">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-2 font-semibold">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 via-violet-400 to-fuchsia-400 shadow-md shadow-violet-200">
-              <Store className="h-5 w-5 text-white" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(251,146,60,0.22),transparent_38%),radial-gradient(circle_at_90%_100%,rgba(245,158,11,0.16),transparent_36%)] dark:bg-[radial-gradient(circle_at_15%_0%,rgba(249,115,22,0.14),transparent_38%),radial-gradient(circle_at_90%_100%,rgba(245,158,11,0.1),transparent_36%)]" />
+        <div
+          className={cn(
+            "relative flex h-sidebar-header min-h-sidebar-header items-center border-b border-slate-200/80 bg-white/60 px-1.5 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70",
+            iconOnly ? "justify-center" : "justify-between gap-1",
+          )}
+        >
+          <Link href="/dashboard" className={cn("flex min-w-0 items-center gap-1 font-semibold", iconOnly && "justify-center")}>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 via-amber-400 to-orange-600 shadow-sm shadow-orange-200 dark:shadow-none">
+              <Store className="h-3.5 w-3.5 text-white" />
             </span>
-            <span className={cn("truncate bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-500 bg-clip-text text-lg text-transparent", collapsed && "lg:hidden")}>
+            <motion.span
+              initial={false}
+              animate={{ opacity: iconOnly ? 0 : 1, width: iconOnly ? 0 : "auto" }}
+              transition={motionT}
+              className="overflow-hidden whitespace-nowrap bg-gradient-to-r from-orange-700 via-amber-600 to-orange-500 bg-clip-text text-[13px] leading-tight text-transparent dark:from-orange-300 dark:via-amber-300 dark:to-orange-200"
+            >
               Universal POS
-            </span>
+            </motion.span>
           </Link>
-          <Button variant="ghost" size="icon" className="text-slate-600 hover:bg-slate-100 lg:hidden" onClick={onCloseMobile} aria-label="Close sidebar">
-            <X className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("hidden text-slate-600 hover:bg-violet-50 hover:text-violet-700 lg:inline-flex", collapsed && "lg:hidden")}
-            onClick={onToggleCollapse}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden" onClick={onCloseMobile} aria-label="Close sidebar">
+            <X className="h-4 w-4" />
           </Button>
         </div>
-        <nav className="sidebar-scroll relative flex-1 overflow-y-scroll py-2">
+        <nav className="sidebar-scroll relative flex-1 overflow-y-scroll py-1">
           {loading ? (
-            <div className="mx-3 space-y-2">
-              <div className="h-9 animate-pulse rounded-md bg-slate-200/70" />
-              <div className="h-9 animate-pulse rounded-md bg-slate-200/70" />
-              <div className="h-9 animate-pulse rounded-md bg-slate-200/70" />
+            <div className="mx-1.5 space-y-1">
+              <div className="h-7 animate-pulse rounded-md bg-slate-200/70 dark:bg-slate-800" />
+              <div className="h-7 animate-pulse rounded-md bg-slate-200/70 dark:bg-slate-800" />
+              <div className="h-7 animate-pulse rounded-md bg-slate-200/70 dark:bg-slate-800" />
             </div>
           ) : (
             groups.map((group) => (
@@ -263,6 +279,7 @@ export function AppSidebar({ open, collapsed, can, loading, onCloseMobile, onTog
                 group={group}
                 pathname={pathname}
                 collapsed={collapsed}
+                isDesktop={isDesktop}
                 expanded={openIds.includes(group.title)}
                 onToggle={() => toggle(group.title)}
                 onNavigate={onCloseMobile}
@@ -270,30 +287,31 @@ export function AppSidebar({ open, collapsed, can, loading, onCloseMobile, onTog
             ))
           )}
         </nav>
-        <div className="relative hidden border-t border-slate-200 bg-white/50 p-2 lg:block">
+        <div className="relative hidden border-t border-slate-200 bg-white/50 p-1 dark:border-slate-800 dark:bg-slate-950/60 lg:block">
           <SidebarTooltip
             label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             description={collapsed ? "Show names and child menus" : "Icon-only compact mode"}
-            toneClass="from-violet-400 to-fuchsia-500"
+            toneClass="from-orange-400 to-amber-500"
             disabled={!collapsed}
           >
             <Button
               variant="ghost"
-              className="w-full justify-center gap-2 text-slate-600 hover:bg-violet-50 hover:text-violet-700"
+              size="sm"
+              className="h-7 w-full justify-center gap-1 text-slate-600 hover:bg-orange-50 hover:text-orange-800 dark:text-slate-300 dark:hover:bg-orange-950/50 dark:hover:text-orange-200"
               onClick={onToggleCollapse}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
               {!collapsed ? (
-                <span className="flex items-center gap-1 text-xs">
-                  <Sparkles className="h-3 w-3 text-violet-500" />
+                <span className="flex items-center gap-0.5 text-[11px]">
+                  <Sparkles className="h-3 w-3 text-amber-500" />
                   Collapse
                 </span>
               ) : null}
             </Button>
           </SidebarTooltip>
         </div>
-      </aside>
+      </motion.aside>
     </>
   );
 }
@@ -302,6 +320,7 @@ function NavBranch({
   group,
   pathname,
   collapsed,
+  isDesktop,
   expanded,
   onToggle,
   onNavigate,
@@ -309,10 +328,12 @@ function NavBranch({
   group: NavGroup;
   pathname: string;
   collapsed: boolean;
+  isDesktop: boolean;
   expanded: boolean;
   onToggle: () => void;
   onNavigate: () => void;
 }) {
+  const iconOnly = collapsed && isDesktop;
   const tone = TONES[group.tone];
   const ParentIcon = group.icon;
   const parentOn = groupActive(pathname, group);
@@ -322,16 +343,16 @@ function NavBranch({
   const iconBox = (
     <span
       className={cn(
-        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all",
+        "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
         parentOn ? tone.active : tone.chip,
       )}
     >
-      <ParentIcon className="h-4 w-4" strokeWidth={2.25} />
+      <ParentIcon className="h-3.5 w-3.5" strokeWidth={2.25} />
     </span>
   );
 
   const childPanel = !leafOnly ? (
-    <div className="mt-2 space-y-0.5 border-t border-white/20 pt-2">
+    <div className="mt-1.5 space-y-0.5 border-t border-white/20 pt-1.5">
       {group.items.map((item) => {
         const Icon = item.icon;
         const on = isActive(pathname, item.href);
@@ -341,40 +362,44 @@ function NavBranch({
             href={item.href}
             onClick={onNavigate}
             className={cn(
-              "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/90 transition hover:bg-white/15",
+              "flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[13px] text-white/90 hover:bg-white/15",
               on && "bg-white/20 font-medium text-white",
             )}
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/20 text-white">
-              <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/20 text-white">
+              <Icon className="h-3 w-3" strokeWidth={2.25} />
             </span>
-            <span className="truncate">{item.title}</span>
+            <span className="min-w-0 flex-1 whitespace-normal leading-snug">{item.title}</span>
           </Link>
         );
       })}
     </div>
   ) : null;
 
+  const rowClass = cn(
+    "relative flex h-8 w-full items-center gap-1 rounded-md px-1 text-[12.5px] font-semibold leading-tight",
+    parentOn
+      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-50 dark:ring-slate-700"
+      : "text-slate-600 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-white",
+    iconOnly && "justify-center px-0",
+  );
+
   if (leafOnly) {
     const link = (
-      <Link
-        href={leaf.href}
-        onClick={onNavigate}
-        className={cn(
-          "relative flex h-10 w-full items-center gap-2 rounded-xl px-2 text-sm font-semibold transition",
-          parentOn ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80" : "text-slate-600 hover:bg-white/80 hover:text-slate-900",
-          collapsed && "lg:justify-center lg:px-0",
-        )}
-      >
-        {parentOn ? <span className={cn("absolute left-0 top-2 h-6 w-1 rounded-r-full", tone.bar)} /> : null}
-        {iconBox}
-        <span className={cn("truncate", collapsed && "lg:hidden")}>{leaf.title}</span>
-      </Link>
+      <motion.div className="w-full" whileHover={{ scale: 1.015 }} whileTap={{ scale: 0.985 }} transition={sidebarHover}>
+        <Link href={leaf.href} onClick={onNavigate} className={rowClass}>
+          {parentOn ? (
+            <motion.span layoutId={`nav-bar-${group.title}`} className={cn("absolute left-0 top-1.5 h-5 w-0.5 rounded-r-full", tone.bar)} />
+          ) : null}
+          {iconBox}
+          <span className={cn("min-w-0 flex-1 whitespace-normal text-left", iconOnly && "sr-only")}>{leaf.title}</span>
+        </Link>
+      </motion.div>
     );
     return (
-      <div className="px-2 py-0.5">
-        {collapsed ? (
-          <SidebarTooltip label={group.title} description={leaf.title} toneClass={tone.tip}>
+      <div className="px-sidebar-x py-sidebar-y">
+        {iconOnly ? (
+          <SidebarTooltip label={group.title} description={helpBlurbFor(leaf.href) ?? leaf.title} toneClass={tone.tip}>
             {link}
           </SidebarTooltip>
         ) : (
@@ -385,35 +410,36 @@ function NavBranch({
   }
 
   const parentBtn = (
-    <button
+    <motion.button
       type="button"
       onClick={onToggle}
       aria-expanded={expanded}
-      className={cn(
-        "relative flex h-10 w-full items-center gap-2 rounded-xl px-2 text-sm font-semibold transition",
-        parentOn ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80" : "text-slate-700 hover:bg-white/80 hover:text-slate-900",
-        collapsed && "lg:justify-center lg:px-0",
-      )}
+      className={rowClass}
+      whileHover={{ scale: 1.015 }}
+      whileTap={{ scale: 0.985 }}
+      transition={sidebarHover}
     >
-      {parentOn ? <span className={cn("absolute left-0 top-2 h-6 w-1 rounded-r-full", tone.bar)} /> : null}
+      {parentOn ? (
+        <motion.span layoutId={`nav-bar-${group.title}`} className={cn("absolute left-0 top-1.5 h-5 w-0.5 rounded-r-full", tone.bar)} />
+      ) : null}
       {iconBox}
-      <span className={cn("min-w-0 flex-1 truncate text-left", collapsed && "lg:hidden")}>{group.title}</span>
+      <span className={cn("min-w-0 flex-1 whitespace-normal text-left", iconOnly && "sr-only")}>{group.title}</span>
       <ChevronDown
         className={cn(
-          "h-4 w-4 shrink-0 text-slate-400 transition-transform",
+          "h-3 w-3 shrink-0 text-slate-400 transition-transform duration-150 dark:text-slate-500",
           expanded ? "rotate-0" : "-rotate-90",
-          collapsed && "lg:hidden",
+          iconOnly && "hidden",
         )}
       />
-    </button>
+    </motion.button>
   );
 
   return (
-    <div className="px-2 py-0.5">
-      {collapsed ? (
+    <div className="px-sidebar-x py-sidebar-y">
+      {iconOnly ? (
         <SidebarTooltip
           label={group.title}
-          description={`${group.items.length} pages`}
+          description={groupBlurb(group.title) ?? `${group.items.length} pages`}
           toneClass={tone.tip}
           panel={childPanel}
         >
@@ -422,13 +448,23 @@ function NavBranch({
       ) : (
         parentBtn
       )}
-      {!collapsed && expanded ? (
-        <div className={cn("relative ml-5 mt-1 space-y-0.5 border-l py-1 pl-3", tone.line)}>
-          {group.items.map((item) => (
-            <ChildLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} tone={tone} />
-          ))}
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {!iconOnly && expanded ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={sidebarTransition}
+            className="overflow-hidden"
+          >
+            <div className={cn("relative ml-3 mt-0.5 space-y-px border-l py-0.5 pl-1.5", tone.line)}>
+              {group.items.map((item) => (
+                <ChildLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} tone={tone} />
+              ))}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
@@ -447,24 +483,26 @@ function ChildLink({
   const active = isActive(pathname, item.href);
   const Icon = item.icon;
   return (
-    <Link
-      href={item.href}
-      onClick={onNavigate}
-      className={cn(
-        "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 transition",
-        tone.child,
-        active && tone.childOn,
-      )}
-    >
-      <span
+    <motion.div whileHover={{ x: 1 }} transition={sidebarHover}>
+      <Link
+        href={item.href}
+        onClick={onNavigate}
         className={cn(
-          "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
-          active ? tone.childChipOn : tone.childChip,
+          "flex items-center gap-1 rounded-md px-1 py-0.5 text-[12.5px] text-slate-600 dark:text-slate-300",
+          tone.child,
+          active && tone.childOn,
         )}
       >
-        <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
-      </span>
-      <span className="truncate">{item.title}</span>
-    </Link>
+        <span
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded",
+            active ? tone.childChipOn : tone.childChip,
+          )}
+        >
+          <Icon className="h-3 w-3" strokeWidth={2.25} />
+        </span>
+        <span className="min-w-0 flex-1 whitespace-normal leading-snug">{item.title}</span>
+      </Link>
+    </motion.div>
   );
 }

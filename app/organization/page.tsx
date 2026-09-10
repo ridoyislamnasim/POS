@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
@@ -15,8 +15,10 @@ type Biz = {
 export default function OrganizationPage() {
   const q = useQuery({ queryKey: ["org"], queryFn: () => api<Biz>("/api/v1/org/business") });
   const [form, setForm] = useState({ name: "", legalName: "", vatId: "", address: "", phone: "", email: "", currency: "BDT", tenantName: "" });
+  const hydrated = useRef(false);
   useEffect(() => {
-    if (!q.data) return;
+    if (!q.data || hydrated.current) return;
+    hydrated.current = true;
     setForm({
       name: q.data.business?.name ?? "",
       legalName: q.data.business?.legalName ?? "",

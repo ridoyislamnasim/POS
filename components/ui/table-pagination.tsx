@@ -36,20 +36,21 @@ export function TablePagination({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-gradient-to-r from-sky-50 via-white to-violet-50 px-3 py-2.5",
+        "flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/25 px-2 py-1.5 animate-in fade-in duration-150 sm:px-3",
         className,
       )}
     >
-      <p className="text-xs text-slate-600">
-        Showing <span className="font-semibold text-slate-900">{from}</span>–
-        <span className="font-semibold text-slate-900">{to}</span> of{" "}
-        <span className="font-semibold text-slate-900">{total}</span>
+      <p className="text-[11px] text-muted-foreground sm:text-xs">
+        <span className="tabular-nums">
+          {from}–{to}
+        </span>{" "}
+        of <span className="font-medium tabular-nums text-foreground">{total}</span>
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <label className="flex items-center gap-1 text-[11px] text-muted-foreground sm:text-xs">
           Rows
           <select
-            className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-800"
+            className="h-7 rounded-md border border-input bg-background px-1.5 text-[11px] font-medium text-foreground transition-colors sm:text-xs"
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
           >
@@ -61,31 +62,33 @@ export function TablePagination({
           </select>
         </label>
         <div className="flex items-center gap-0.5">
-          <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={!canPrev} onClick={() => setPage(1)} aria-label="First page">
-            <ChevronsLeft className="h-4 w-4" />
+          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canPrev} onClick={() => setPage(1)} aria-label="First page">
+            <ChevronsLeft className="h-3.5 w-3.5" />
           </Button>
-          <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={!canPrev} onClick={() => setPage(page - 1)} aria-label="Previous page">
-            <ChevronLeft className="h-4 w-4" />
+          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canPrev} onClick={() => setPage(page - 1)} aria-label="Previous page">
+            <ChevronLeft className="h-3.5 w-3.5" />
           </Button>
-          {pages[0] > 1 ? <span className="px-1 text-xs text-slate-400">…</span> : null}
+          {pages[0] > 1 ? <span className="px-0.5 text-[10px] text-muted-foreground">…</span> : null}
           {pages.map((n) => (
             <Button
               key={n}
               type="button"
               size="icon"
-              variant={n === page ? "default" : "outline"}
-              className={cn("h-8 w-8 text-xs", n === page && "bg-violet-600 hover:bg-violet-700")}
+              variant={n === page ? "warning" : "outline"}
+              className={cn("h-7 w-7 text-[11px] tabular-nums transition-colors", n === page && "pointer-events-none")}
+              aria-label={`Page ${n}`}
+              aria-current={n === page ? "page" : undefined}
               onClick={() => setPage(n)}
             >
               {n}
             </Button>
           ))}
-          {pages[pages.length - 1] < pageCount ? <span className="px-1 text-xs text-slate-400">…</span> : null}
-          <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={!canNext} onClick={() => setPage(page + 1)} aria-label="Next page">
-            <ChevronRight className="h-4 w-4" />
+          {pages[pages.length - 1] < pageCount ? <span className="px-0.5 text-[10px] text-muted-foreground">…</span> : null}
+          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canNext} onClick={() => setPage(page + 1)} aria-label="Next page">
+            <ChevronRight className="h-3.5 w-3.5" />
           </Button>
-          <Button type="button" variant="outline" size="icon" className="h-8 w-8" disabled={!canNext} onClick={() => setPage(pageCount)} aria-label="Last page">
-            <ChevronsRight className="h-4 w-4" />
+          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canNext} onClick={() => setPage(pageCount)} aria-label="Last page">
+            <ChevronsRight className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>

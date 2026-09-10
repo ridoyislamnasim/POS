@@ -35,7 +35,7 @@ export function ProductAddDialog({ open, onClose }: { open: boolean; onClose: ()
 
   const attrs = useQuery({
     queryKey: ["attrs"],
-    queryFn: () => api<Attr[]>("/api/v1/catalog/attributes"),
+    queryFn: () => api<Attr[]>("/api/v1/catalog/attributes?limit=100"),
     enabled: open,
   });
   const taxes = useQuery({

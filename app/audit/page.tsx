@@ -1,21 +1,18 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
-import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, EmptyState } from "@/components/ui";
+import { ListFrame } from "@/components/ui/list-frame";
+import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Truncate } from "@/components/ui";
 
 type Log = { id: string; action: string; entityType: string; entityId?: string; createdAt: string; userId?: string };
 
 export default function AuditPage() {
-  const q = useQuery({ queryKey: ["audit"], queryFn: () => api<Log[]>("/api/v1/audit?limit=100") });
-  const { rows, pager } = usePagedRows(q.data);
+  const list = useServerList<Log>("audit", "/api/v1/audit");
   return (
     <AppShell>
       <PageHeader title="Activity / Audit Log" description="Every privileged action on this tenant." />
-      {!q.data?.length ? <EmptyState title="No activity yet" /> : null}
-      <div className="rounded-lg border bg-card">
+      <ListFrame list={list} searchPlaceholder="Search action or entity" dateFilter columnCount={3} emptyTitle="No records found">
         <Table>
           <TableHeader>
             <TableRow>
@@ -25,17 +22,18 @@ export default function AuditPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => (
+            {list.rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="tabular-nums text-xs">{new Date(r.createdAt).toLocaleString()}</TableCell>
                 <TableCell>{r.action}</TableCell>
-                <TableCell className="text-muted-foreground">{r.entityType} {r.entityId ?? ""}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  <Truncate>{`${r.entityType} ${r.entityId ?? ""}`}</Truncate>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+      </ListFrame>
     </AppShell>
   );
 }

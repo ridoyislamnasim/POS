@@ -2,7 +2,9 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/cn";
+import { sidebarHover } from "@/lib/sidebar-layout";
 
 type Props = {
   label: string;
@@ -72,27 +74,36 @@ export function SidebarTooltip({ label, description, toneClass, disabled, childr
       onBlur={hide}
     >
       {children}
-      {open && typeof document !== "undefined"
+      {typeof document !== "undefined"
         ? createPortal(
-            <div
-              ref={tipRef}
-              role="tooltip"
-              style={{ top: coords.top, left: coords.left }}
-              onMouseEnter={show}
-              onMouseLeave={hide}
-              className={cn(
-                "pointer-events-auto fixed z-[80] min-w-[180px] max-w-[260px] animate-in fade-in-0 zoom-in-95 rounded-xl border border-white/20 p-0 text-white shadow-2xl",
-                "bg-gradient-to-br",
-                toneClass,
-              )}
-            >
-              <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-white/20 bg-inherit" />
-              <div className="relative rounded-xl px-3 py-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-white/80">{label}</div>
-                {description ? <p className="mt-0.5 text-sm font-medium leading-snug">{description}</p> : null}
-                {panel ? <div className="max-h-72 overflow-y-auto pr-0.5">{panel}</div> : null}
-              </div>
-            </div>,
+            <AnimatePresence>
+              {open ? (
+                <motion.div
+                  key="sidebar-tooltip"
+                  ref={tipRef}
+                  role="tooltip"
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -4 }}
+                  transition={sidebarHover}
+                  style={{ top: coords.top, left: coords.left }}
+                  onMouseEnter={show}
+                  onMouseLeave={hide}
+                  className={cn(
+                    "pointer-events-auto fixed z-[80] min-w-[160px] max-w-[228px] rounded-lg border border-white/20 p-0 text-white shadow-xl",
+                    "bg-gradient-to-br",
+                    toneClass,
+                  )}
+                >
+                  <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b border-l border-white/20 bg-inherit" />
+                  <div className="relative rounded-lg px-2 py-1.5">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-white/80">{label}</div>
+                    {description ? <p className="mt-0.5 text-[13px] font-medium leading-snug">{description}</p> : null}
+                    {panel ? <div className="max-h-72 overflow-y-auto pr-0.5">{panel}</div> : null}
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
             document.body,
           )
         : null}

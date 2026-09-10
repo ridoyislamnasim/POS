@@ -1,5 +1,6 @@
 "use client";
 
+import { motion, useReducedMotion } from "framer-motion";
 import { Moon, Sun, Monitor } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -14,8 +15,9 @@ const OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
 
 export function ThemeToggle() {
   const { preference, setPreference } = useTheme();
+  const reduce = useReducedMotion();
   return (
-    <div className="inline-flex items-center rounded-full border bg-background p-0.5" role="group" aria-label="Theme">
+    <div className="inline-flex h-8 items-center rounded-full border bg-background p-0.5" role="group" aria-label="Theme">
       {OPTIONS.map((opt) => {
         const Icon = opt.icon;
         const active = preference === opt.value;
@@ -24,12 +26,21 @@ export function ThemeToggle() {
             key={opt.value}
             variant="ghost"
             size="icon"
-            className={cn("h-8 w-8 rounded-full", active && "bg-primary/10 text-primary")}
+            className={cn("relative h-7 w-7 rounded-full", active && "text-highlight-foreground")}
             onClick={() => setPreference(opt.value)}
+            type="button"
             title={opt.label}
             aria-label={opt.label}
+            aria-pressed={active}
           >
-            <Icon className="h-4 w-4" />
+            {active ? (
+              <motion.span
+                layoutId={reduce ? undefined : "theme-pill"}
+                className="absolute inset-0 rounded-full bg-highlight/20"
+                transition={{ type: "spring", stiffness: 420, damping: 32 }}
+              />
+            ) : null}
+            <Icon className={cn("relative z-[1] h-4 w-4", active && "text-amber-700 dark:text-amber-300")} />
           </Button>
         );
       })}

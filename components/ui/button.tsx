@@ -1,5 +1,8 @@
+"use client";
+
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 
 const buttonVariants = cva(
@@ -14,10 +17,12 @@ const buttonVariants = cva(
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
         success: "bg-success text-success-foreground hover:bg-success/90",
+        warning: "bg-warning text-warning-foreground hover:bg-warning/90",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
+        xs: "h-7 rounded-md px-2 text-xs",
         lg: "h-11 rounded-md px-8",
         icon: "h-10 w-10",
       },
@@ -30,13 +35,29 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart">,
     VariantProps<typeof buttonVariants> {}
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, type = "button", ...props }, ref) => (
-    <button type={type} className={cn(buttonVariants({ variant, size }), className)} ref={ref} {...props} />
-  ),
+  ({ className, variant, size, type = "button", disabled, ...props }, ref) => {
+    const reduce = useReducedMotion();
+    const press =
+      !disabled &&
+      !reduce &&
+      (variant === "default" || variant === "success" || variant === "destructive" || variant === "warning" || variant == null);
+    return (
+      <motion.button
+        type={type}
+        disabled={disabled}
+        className={cn(buttonVariants({ variant, size }), className)}
+        ref={ref}
+        whileHover={press ? { y: -1 } : undefined}
+        whileTap={press ? { scale: 0.98 } : undefined}
+        transition={{ type: "spring", stiffness: 520, damping: 32, mass: 0.4 }}
+        {...props}
+      />
+    );
+  },
 );
 Button.displayName = "Button";
 

@@ -10,8 +10,11 @@ export default function CustomersPage() {
       description="Profiles, credit, and loyalty live on each customer record."
       path="/api/v1/customers"
       queryKey="customers"
-      createLabel="Add customer"
-      entityName="customer"
+      searchPlaceholder="Search name, phone, email"
+      statusOptions={[
+        { value: "ACTIVE", label: "Active" },
+        { value: "INACTIVE", label: "Inactive" },
+      ]}
       fields={[
         { key: "name", label: "Name", required: true },
         { key: "phone", label: "Phone", required: true },

@@ -14,6 +14,9 @@ const REPORTS = [
   { href: "/reports/tax", title: "Tax / VAT Report", desc: "Output vs input VAT" },
   { href: "/reports/cashier", title: "Cashier Report", desc: "Sales by cashier" },
   { href: "/reports/products", title: "Product Performance", desc: "Best-selling SKUs" },
+  { href: "/reports/returns", title: "Returns Report", desc: "Returned qty, value, and refunds" },
+  { href: "/reports/receiving", title: "Receiving Report", desc: "Posted receipts qty and value" },
+  { href: "/reports/damage", title: "Damage Report", desc: "Approved damage qty and cost" },
 ];
 
 export default function ReportsHubPage() {

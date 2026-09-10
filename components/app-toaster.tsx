@@ -24,7 +24,8 @@ export function AppToaster() {
           description: "text-xs text-muted-foreground",
           success: "border-success/30",
           error: "border-destructive/30",
-          warning: "border-warning/30",
+          warning: "border-warning/40 bg-warning/10",
+          info: "border-highlight/40 bg-highlight/10",
           closeButton: "border bg-card text-muted-foreground",
         },
       }}

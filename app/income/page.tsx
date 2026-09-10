@@ -1,6 +1,6 @@
 "use client";
 
-import { ResourcePage, moneyCell } from "@/components/erp-page";
+import { ResourcePage, moneyCell, moneyText, sumField } from "@/components/erp-page";
 import { useMe } from "@/lib/auth";
 
 export default function IncomePage() {
@@ -11,6 +11,13 @@ export default function IncomePage() {
       description="Other income outside POS sales."
       path="/api/v1/finance/income"
       queryKey="income"
+      searchPlaceholder="Search category or notes"
+      dateFilter
+      summary={({ rows, total }) => [
+        { label: "Records", value: total, accent: "sky" },
+        { label: "Amount", value: moneyText(sumField(rows, "amount")), accent: "emerald", description: "This page" },
+        { label: "Cash", value: rows.filter((r) => String((r as { method?: string }).method ?? "").toUpperCase() === "CASH").length, accent: "lime" },
+      ]}
       fields={[
         { key: "category", label: "Category", required: true },
         { key: "amount", label: "Amount", type: "number", required: true },

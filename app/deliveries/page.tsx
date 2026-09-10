@@ -11,6 +11,9 @@ export default function DeliveriesPage() {
       description="Last-mile status for sales orders and e-commerce tickets."
       path="/api/v1/commerce/deliveries"
       queryKey="deliveries"
+      searchPlaceholder="Search address, phone, tracking"
+      dateFilter
+      statusOptions={["PENDING", "ASSIGNED", "IN_TRANSIT", "DELIVERED", "FAILED", "RETURNED"].map((v) => ({ value: v, label: v }))}
       fields={[
         { key: "branchId", label: "Branch", type: "select", required: true, options: (me?.branches ?? []).map((b) => ({ value: b.id, label: b.name })) },
         { key: "address", label: "Address", required: true },

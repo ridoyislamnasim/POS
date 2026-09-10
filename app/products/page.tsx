@@ -1,32 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
-import { ProductAddDialog } from "@/components/catalog/product-add-dialog";
+import { ListFrame } from "@/components/ui/list-frame";
 import {
-  Badge,
   Button,
-  EmptyState,
-  ErrorState,
   PageHeader,
-  Skeleton,
+  StatusBadge,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
-  TablePagination,
   TableRow,
-  btnGhost,
+  Truncate,
+  tableCellActions,
+  tableCellNumeric,
+  tableSubText,
   btnPrimary,
-  inputClass,
 } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { toastError, toastSuccess } from "@/lib/toast";
+import { printBarcodeLabels } from "@/lib/print-barcodes";
+import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
 
 type Product = {
   id: string;
@@ -46,32 +45,8 @@ type Product = {
 
 export default function ProductsPage() {
   const qc = useQueryClient();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("ALL");
-  const [addOpen, setAddOpen] = useState(false);
   const [pendingArchive, setPendingArchive] = useState<Product | null>(null);
-  function closeAdd() {
-    setAddOpen(false);
-    const url = new URL(window.location.href);
-    if (url.searchParams.has("new")) {
-      url.searchParams.delete("new");
-      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : "") + url.hash);
-    }
-  }
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const v = params.get("q");
-    if (v) setQ(v);
-    if (params.get("new") === "1") setAddOpen(true);
-  }, []);
-  const products = useQuery({
-    queryKey: ["admin-products", q, status],
-    queryFn: () =>
-      api<Product[]>(
-        `/api/v1/catalog/products?status=${encodeURIComponent(status)}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
-      ),
-  });
+  const list = useServerList<Product>("admin-products", "/api/v1/catalog/products");
   const archive = useMutation({
     mutationFn: (id: string) => api(`/api/v1/catalog/products/${id}/archive`, { method: "POST" }),
     onSuccess: () => {
@@ -82,78 +57,84 @@ export default function ProductsPage() {
     onError: (e) => toastError(e, "Could not archive product"),
   });
 
-  const { rows, pager } = usePagedRows(products.data ?? []);
-
   return (
     <AppShell>
       <PageHeader title="Products" description="Catalogue, variants, and archive.">
-        <input
-          className={inputClass + " w-48"}
-          placeholder="Search name, SKU, barcode"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <select className={inputClass + " w-32"} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="ALL">All</option>
-          <option value="ACTIVE">Active</option>
-          <option value="ARCHIVED">Archived</option>
-        </select>
-        <button type="button" className={btnPrimary} onClick={() => setAddOpen(true)}>
+        <Link href="/products/new" className={btnPrimary}>
           Add product
-        </button>
+        </Link>
       </PageHeader>
-      {products.isLoading ? <Skeleton rows={8} /> : null}
-      {products.isError ? (
-        <ErrorState message="Could not load products." onRetry={() => products.refetch()} />
-      ) : null}
-      {!products.isLoading && !products.data?.length ? (
-        <EmptyState
-          title="No products"
-          hint="Create a product and generate Colour × Size variants."
-          action={
-            <button type="button" className={btnPrimary} onClick={() => setAddOpen(true)}>
-              Add product
-            </button>
-          }
-        />
-      ) : null}
-      <div className="rounded-lg border bg-card shadow-sm">
+      <ListFrame
+        list={list}
+        searchPlaceholder="Search name, SKU, barcode"
+        statusOptions={[
+          { value: "ACTIVE", label: "Active" },
+          { value: "ARCHIVED", label: "Archived" },
+        ]}
+        columnCount={7}
+        emptyTitle="No records found"
+        emptyHint="Create a product with a category. Variants are optional and fully dynamic."
+        emptyAction={
+          <Link href="/products/new" className={btnPrimary}>
+            Add product
+          </Link>
+        }
+      >
         <Table className="min-w-[720px]">
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>SKU / code</TableHead>
-              <TableHead>Variants</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-right">Stock</TableHead>
+              <TableHead className={tableCellNumeric}>Variants</TableHead>
+              <TableHead className={tableCellNumeric}>Price</TableHead>
+              <TableHead className={tableCellNumeric}>Stock</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead />
+              <TableHead className="w-[1%]" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((p) => {
+            {list.rows.map((p) => {
               const stock = p.variants.reduce((n, v) => n + v.stock.reduce((s, r) => s + Number(r.quantity), 0), 0);
               const price = p.variants[0]?.price ?? "0";
               return (
                 <TableRow key={p.id}>
                   <TableCell>
                     <Link href={`/products/${p.id}`} className="font-medium hover:underline">
-                      {p.name}
+                      <Truncate>{p.name}</Truncate>
                     </Link>
-                    <div className="text-xs text-muted-foreground">{p.category ?? "—"}</div>
+                    <div className={tableSubText}>{p.category ?? "—"}</div>
                   </TableCell>
                   <TableCell>
                     {p.code}
-                    <div className="text-xs text-muted-foreground">{p.variants[0]?.sku ?? "—"}</div>
+                    <div className={tableSubText}>{p.variants[0]?.sku ?? "—"}</div>
                   </TableCell>
-                  <TableCell>{p.variants.length}</TableCell>
-                  <TableCell className="text-right tabular-nums">৳ {Number(price).toFixed(2)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{stock}</TableCell>
+                  <TableCell className={tableCellNumeric}>{p.variants.length}</TableCell>
+                  <TableCell className={tableCellNumeric}>৳ {Number(price).toFixed(2)}</TableCell>
+                  <TableCell className={tableCellNumeric}>{stock}</TableCell>
                   <TableCell>
-                    <Badge variant={p.status === "ACTIVE" ? "success" : "secondary"}>{p.status}</Badge>
+                    <StatusBadge value={p.status} />
                   </TableCell>
-                  <TableCell className="space-x-1 whitespace-nowrap">
-                    <Link href={`/products/${p.id}`} className={btnGhost + " h-7 px-2 text-xs"}>
+                  <TableCell className={tableCellActions}>
+                    <button
+                      type="button"
+                      className="mr-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
+                      onClick={() => {
+                        const labels = p.variants.flatMap((v) => {
+                          const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
+                          return codes.map((code) => ({
+                            code,
+                            sku: v.sku,
+                            name: p.name,
+                            price: Number(v.price).toFixed(2),
+                            kind: "CODE128",
+                          }));
+                        });
+                        if (!printBarcodeLabels(labels)) toastWarn("Allow pop-ups to print barcode labels");
+                      }}
+                    >
+                      Print
+                    </button>
+                    <Link href={`/products/${p.id}`} className="mr-1 text-xs font-medium text-primary underline-offset-2 hover:underline">
                       Edit
                     </Link>
                     {p.status !== "ARCHIVED" ? (
@@ -167,9 +148,7 @@ export default function ProductsPage() {
             })}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
-      <ProductAddDialog open={addOpen} onClose={closeAdd} />
+      </ListFrame>
       <ConfirmDialog
         open={Boolean(pendingArchive)}
         title="Archive product?"

@@ -36,9 +36,17 @@ import {
   Bike,
   ClipboardCheck,
   PieChart,
+  RotateCcw,
+  Layers,
+  Ruler,
+  Tags,
+  Tag,
+  PackagePlus,
+  AlertTriangle,
+  ListTree,
 } from "lucide-react";
 
-export type NavTone = "sky" | "emerald" | "amber" | "rose" | "violet" | "teal" | "orange" | "indigo" | "cyan" | "blue" | "fuchsia";
+export type NavTone = "orange" | "emerald" | "amber" | "rose" | "lime" | "teal" | "yellow" | "stone" | "fuchsia";
 
 export type NavItem = {
   title: string;
@@ -58,7 +66,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Overview",
     icon: LayoutDashboard,
-    tone: "sky",
+    tone: "orange",
     items: [{ title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "report.view" }],
   },
   {
@@ -68,6 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { title: "POS", href: "/pos", icon: ShoppingCart, permission: "sale.create" },
       { title: "Sales", href: "/sales", icon: Receipt, permission: "sale.view" },
+      { title: "Returns", href: "/returns", icon: RotateCcw, permission: "sale.view" },
       { title: "Sales Orders", href: "/orders", icon: ClipboardCheck, permission: "order.view" },
     ],
   },
@@ -102,9 +111,14 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Catalog",
     icon: Package,
-    tone: "violet",
+    tone: "lime",
     items: [
       { title: "Products", href: "/products", icon: Package, permission: "catalog.manage" },
+      { title: "Categories", href: "/categories", icon: Layers, permission: "catalog.manage" },
+      { title: "Subcategories", href: "/subcategories", icon: Tags, permission: "catalog.manage" },
+      { title: "Brands", href: "/brands", icon: Tag, permission: "catalog.manage" },
+      { title: "Units", href: "/units", icon: Ruler, permission: "catalog.manage" },
+      { title: "Attributes", href: "/attributes", icon: Tags, permission: "catalog.manage" },
       { title: "Barcodes", href: "/barcodes", icon: Barcode, permission: "barcode.manage" },
     ],
   },
@@ -112,12 +126,17 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Inventory",
     icon: Warehouse,
     tone: "teal",
-    items: [{ title: "Stock", href: "/inventory", icon: Warehouse, permission: "inventory.view" }],
+    items: [
+      { title: "Stock", href: "/inventory", icon: Warehouse, permission: "inventory.view" },
+      { title: "Receiving", href: "/receiving", icon: PackagePlus, permission: "inventory.receive.view" },
+      { title: "Damage", href: "/damage", icon: AlertTriangle, permission: "inventory.damage.view" },
+      { title: "Stock ledger", href: "/inventory/movements", icon: ListTree, permission: "inventory.ledger.view" },
+    ],
   },
   {
     title: "Staff & Security",
     icon: Shield,
-    tone: "orange",
+    tone: "stone",
     items: [
       { title: "Employees", href: "/users", icon: Users, permission: "user.manage" },
       { title: "Roles & Permissions", href: "/roles", icon: Shield, permission: "user.manage" },
@@ -130,7 +149,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: "Reports",
     icon: FileBarChart,
-    tone: "indigo",
+    tone: "yellow",
     items: [
       { title: "All Reports", href: "/reports", icon: FileBarChart, permission: "report.view" },
       { title: "Sales Report", href: "/reports/sales", icon: Receipt, permission: "report.view" },
@@ -142,22 +161,25 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "Tax Report", href: "/reports/tax", icon: FileBarChart, permission: "report.finance" },
       { title: "Cashier Report", href: "/reports/cashier", icon: Users, permission: "report.view" },
       { title: "Product Performance", href: "/reports/products", icon: Package, permission: "report.view" },
+      { title: "Returns Report", href: "/reports/returns", icon: RotateCcw, permission: "sale.view" },
+      { title: "Receiving Report", href: "/reports/receiving", icon: PackagePlus, permission: "inventory.receive.view" },
+      { title: "Damage Report", href: "/reports/damage", icon: AlertTriangle, permission: "inventory.damage.view" },
     ],
   },
   {
     title: "Commerce",
     icon: Globe,
-    tone: "cyan",
+    tone: "lime",
     items: [
       { title: "E-commerce Orders", href: "/ecommerce", icon: Globe, permission: "order.view" },
       { title: "Deliveries", href: "/deliveries", icon: Bike, permission: "delivery.manage" },
-      { title: "Notifications", href: "/notifications", icon: Bell, permission: "notification.send" },
+      { title: "Notifications", href: "/notifications", icon: Bell, permission: "notification.view" },
     ],
   },
   {
     title: "Organization",
     icon: Building2,
-    tone: "blue",
+    tone: "stone",
     items: [
       { title: "Business / Org", href: "/organization", icon: Building2, permission: "tenant.manage" },
       { title: "Branches", href: "/branches", icon: GitBranch, permission: "branch.manage" },
@@ -182,6 +204,11 @@ export const PAGE_TITLES: Record<string, { crumb: string; title: string }> = {
   "/dashboard": { crumb: "Overview / Dashboard", title: "Dashboard" },
   "/pos": { crumb: "Sell / POS", title: "Point of sale" },
   "/sales": { crumb: "Sell / Sales", title: "Sales" },
+  "/returns": { crumb: "Sell / Returns", title: "Returns / Exchange" },
+  "/receiving": { crumb: "Inventory / Receiving", title: "Stock receiving" },
+  "/damage": { crumb: "Inventory / Damage", title: "Stock damage" },
+  "/inventory": { crumb: "Inventory / Stock", title: "Inventory" },
+  "/inventory/movements": { crumb: "Inventory / Ledger", title: "Inventory ledger" },
   "/orders": { crumb: "Sell / Sales Orders", title: "Sales Orders" },
   "/purchases": { crumb: "Finance / Purchases", title: "Purchases" },
   "/purchase-orders": { crumb: "Finance / Purchase Orders", title: "Purchase Orders" },
@@ -197,8 +224,13 @@ export const PAGE_TITLES: Record<string, { crumb: string; title: string }> = {
   "/loyalty": { crumb: "CRM / Loyalty", title: "Loyalty / Points" },
   "/suppliers": { crumb: "CRM / Suppliers", title: "Suppliers" },
   "/products": { crumb: "Catalog / Products", title: "Products" },
+  "/products/new": { crumb: "Catalog / Products", title: "Create product" },
+  "/categories": { crumb: "Catalog / Categories", title: "Categories" },
+  "/subcategories": { crumb: "Catalog / Subcategories", title: "Subcategories" },
+  "/brands": { crumb: "Catalog / Brands", title: "Brands" },
+  "/units": { crumb: "Catalog / Units", title: "Units" },
+  "/attributes": { crumb: "Catalog / Attributes", title: "Attributes" },
   "/barcodes": { crumb: "Catalog / Barcodes", title: "Barcode Generator" },
-  "/inventory": { crumb: "Inventory / Stock", title: "Inventory" },
   "/users": { crumb: "Staff / Employees", title: "Employees" },
   "/roles": { crumb: "Staff / Roles", title: "Roles & Permissions" },
   "/attendance": { crumb: "Staff / Attendance", title: "Attendance" },
@@ -217,6 +249,8 @@ export const PAGE_TITLES: Record<string, { crumb: string; title: string }> = {
   "/backup": { crumb: "Org / Backup", title: "Backup & Restore" },
   "/settings": { crumb: "Settings", title: "Settings" },
   "/import-export": { crumb: "Settings / Import", title: "Import / Export" },
+  "/help": { crumb: "Help", title: "Help Center" },
+  "/help/role": { crumb: "Help / Role", title: "What can I do?" },
 };
 
 export function pageMeta(path: string) {

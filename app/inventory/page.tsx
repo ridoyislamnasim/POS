@@ -3,10 +3,35 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
+import { useMe } from "@/lib/auth";
+import { usePOSStore } from "@/lib/pos-store";
 import { AppShell } from "@/components/app-shell";
-import { Card, EmptyState, ErrorState, Field, Modal, PageHeader, Skeleton, TablePagination, btnGhost, btnPrimary, inputClass, Badge } from "@/components/ui";
+import { ListFrame } from "@/components/ui/list-frame";
+import {
+  Card,
+  Field,
+  FilterSelect,
+  Modal,
+  PageHeader,
+  StatusBadge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableLoadingSkeleton,
+  TablePagination,
+  TableRow,
+  Truncate,
+  btnGhost,
+  btnPrimary,
+  inputClass,
+  tableCellActions,
+  tableCellNumeric,
+} from "@/components/ui";
 import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
+import { usePagedRows } from "@/lib/use-pagination";
 
 type Row = {
   id: string;
@@ -18,6 +43,9 @@ type Row = {
   location: string;
   available: number;
   reserved: number;
+  damaged?: number;
+  quarantine?: number;
+  physical?: number;
   inTransit: number;
   cost: number;
   stockValue: number;
@@ -30,22 +58,17 @@ type Detail = { stock: Row[]; movements: Movement[]; variant: { sku: string; pro
 
 export default function InventoryPage() {
   const qc = useQueryClient();
-  const [q, setQ] = useState("");
-  const [locationId, setLocationId] = useState("");
-  const [status, setStatus] = useState("");
+  const { me } = useMe();
+  const branchId = usePOSStore((s) => s.branchId);
   const [viewId, setViewId] = useState<string | null>(null);
   const [action, setAction] = useState<null | { type: "adjust" | "transfer" | "reserve"; row: Row }>(null);
+  const [takeOpen, setTakeOpen] = useState(false);
+  const [counts, setCounts] = useState<Record<string, string>>({});
 
   const locs = useQuery({ queryKey: ["inv-locs"], queryFn: () => api<Loc[]>("/api/v1/inventory/locations") });
-  const list = useQuery({
-    queryKey: ["inventory", q, locationId, status],
-    queryFn: () => {
-      const p = new URLSearchParams();
-      if (q) p.set("q", q);
-      if (locationId) p.set("locationId", locationId);
-      if (status) p.set("status", status);
-      return api<Row[]>(`/api/v1/inventory?${p.toString()}`);
-    },
+  const list = useServerList<Row>("inventory", "/api/v1/inventory", {
+    extraKeys: ["locationId"],
+    extraLabels: { locationId: "Location" },
   });
   const detail = useQuery({
     queryKey: ["inv-var", viewId],
@@ -80,86 +103,115 @@ export default function InventoryPage() {
     },
     onError: (e) => toastError(e, "Reserve failed"),
   });
+  const stockTake = useMutation({
+    mutationFn: () => {
+      const loc = list.extras.locationId || (list.rows[0]?.locationId ?? "");
+      const lines = list.rows
+        .filter((r) => !list.extras.locationId || r.locationId === loc)
+        .map((r) => ({ variantId: r.variantId, countedQty: Number(counts[r.id] ?? r.available) }));
+      return api("/api/v1/inventory/stock-takes", {
+        method: "POST",
+        body: JSON.stringify({
+          branchId: branchId ?? me?.branches[0]?.id,
+          locationId: loc,
+          notes: "Stock take",
+          lines,
+        }),
+      });
+    },
+    onSuccess: () => {
+      toastSuccess("Stock take posted");
+      setTakeOpen(false);
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+    },
+    onError: (e) => toastError(e, "Stock take failed"),
+  });
 
-  const { rows, pager } = usePagedRows(list.data ?? []);
   const { rows: movementRows, pager: movementPager } = usePagedRows(detail.data?.movements ?? []);
 
   return (
     <AppShell>
       <PageHeader title="Inventory">
-        <input className={inputClass + " w-48"} placeholder="Search product / SKU" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className={inputClass + " w-40"} value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-          <option value="">All locations</option>
-          {(locs.data ?? []).map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-        <select className={inputClass + " w-36"} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All status</option>
-          <option value="IN_STOCK">In stock</option>
-          <option value="LOW">Low stock</option>
-          <option value="OUT_OF_STOCK">Out of stock</option>
-        </select>
+        <button type="button" className={btnGhost} onClick={() => setTakeOpen(true)}>
+          Stock take
+        </button>
       </PageHeader>
-      {list.isLoading ? <Skeleton rows={8} /> : null}
-      {list.isError ? <ErrorState message="Could not load inventory." onRetry={() => list.refetch()} /> : null}
-      {!list.isLoading && !list.data?.length ? <EmptyState title="No stock rows" hint="Receive or adjust stock to populate this list." /> : null}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] text-sm">
-          <thead>
-            <tr className="text-left text-xs text-muted-foreground">
-              <th className="py-2">Product</th>
-              <th>SKU</th>
-              <th>Variant</th>
-              <th>Location</th>
-              <th className="text-right">Avail</th>
-              <th className="text-right">Reserved</th>
-              <th className="text-right">In transit</th>
-              <th className="text-right">Cost</th>
-              <th className="text-right">Value</th>
-              <th>Status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-line">
-                <td className="py-1.5">{r.product}</td>
-                <td>{r.sku}</td>
-                <td>{r.variant}</td>
-                <td>{r.location}</td>
-                <td className="text-right tabular-nums">{r.available}</td>
-                <td className="text-right tabular-nums">{r.reserved}</td>
-                <td className="text-right tabular-nums">{r.inTransit}</td>
-                <td className="text-right tabular-nums">{Number(r.cost).toFixed(2)}</td>
-                <td className="text-right tabular-nums">{Number(r.stockValue).toFixed(2)}</td>
-                <td>
-                  <Badge variant={r.status === "OUT_OF_STOCK" ? "destructive" : r.status === "LOW" ? "warning" : "success"}>
-                    {r.status}
-                  </Badge>
-                </td>
-                <td className="whitespace-nowrap">
-                  <button type="button" className="text-xs underline" onClick={() => setViewId(r.variantId)}>
-                    View
-                  </button>{" "}
-                  <button type="button" className="text-xs underline" onClick={() => setAction({ type: "adjust", row: r })}>
-                    Adjust
-                  </button>{" "}
-                  <button type="button" className="text-xs underline" onClick={() => setAction({ type: "transfer", row: r })}>
-                    Transfer
-                  </button>{" "}
-                  <button type="button" className="text-xs underline" onClick={() => setAction({ type: "reserve", row: r })}>
-                    Reserve
-                  </button>
-                </td>
-              </tr>
+      <ListFrame
+        list={list}
+        searchPlaceholder="Search product / SKU"
+        statusOptions={[
+          { value: "IN_STOCK", label: "In stock" },
+          { value: "LOW", label: "Low stock" },
+          { value: "OUT_OF_STOCK", label: "Out of stock" },
+        ]}
+        extraFilters={
+          <FilterSelect
+            value={list.extras.locationId as string}
+            onChange={(v) => list.setFilter("locationId", v)}
+            placeholder="Location"
+            options={(locs.data ?? []).map((l) => ({ value: l.id, label: l.name }))}
+          />
+        }
+        columnCount={11}
+        emptyTitle="No records found"
+        emptyHint="Receive or adjust stock to populate this list."
+      >
+        <Table className="min-w-[880px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Product</TableHead>
+              <TableHead>SKU</TableHead>
+              <TableHead>Variant</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead className={tableCellNumeric}>Avail</TableHead>
+              <TableHead className={tableCellNumeric}>Reserved</TableHead>
+              <TableHead className={tableCellNumeric}>Damaged</TableHead>
+              <TableHead className={tableCellNumeric}>Hold</TableHead>
+              <TableHead className={tableCellNumeric}>Cost</TableHead>
+              <TableHead className={tableCellNumeric}>Value</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-[1%]" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.rows.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <Truncate>{r.product}</Truncate>
+                </TableCell>
+                <TableCell>{r.sku}</TableCell>
+                <TableCell>{r.variant}</TableCell>
+                <TableCell>{r.location}</TableCell>
+                <TableCell className={tableCellNumeric}>{r.available}</TableCell>
+                <TableCell className={tableCellNumeric}>{r.reserved}</TableCell>
+                <TableCell className={tableCellNumeric}>{r.damaged ?? 0}</TableCell>
+                <TableCell className={tableCellNumeric}>{r.quarantine ?? 0}</TableCell>
+                <TableCell className={tableCellNumeric}>{Number(r.cost).toFixed(2)}</TableCell>
+                <TableCell className={tableCellNumeric}>{Number(r.stockValue).toFixed(2)}</TableCell>
+                <TableCell>
+                  <StatusBadge value={r.status} />
+                </TableCell>
+                <TableCell className={tableCellActions}>
+                  <div className="btn-group inline-flex flex-wrap gap-0.5">
+                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setViewId(r.variantId)}>
+                      View
+                    </button>
+                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setAction({ type: "adjust", row: r })}>
+                      Adjust
+                    </button>
+                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setAction({ type: "transfer", row: r })}>
+                      Transfer
+                    </button>
+                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setAction({ type: "reserve", row: r })}>
+                      Reserve
+                    </button>
+                  </div>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-        <TablePagination {...pager} />
-      </div>
+          </TableBody>
+        </Table>
+      </ListFrame>
 
       {viewId ? (
         <Card className="mt-3">
@@ -171,7 +223,7 @@ export default function InventoryPage() {
               Close
             </button>
           </div>
-          {detail.isLoading ? <Skeleton /> : null}
+          {detail.isLoading ? <TableLoadingSkeleton columns={3} rows={4} /> : null}
           <div className="text-xs font-medium uppercase text-muted-foreground">History</div>
           <ul className="mt-1 max-h-56 overflow-auto text-sm">
             {movementRows.map((m) => (
@@ -202,6 +254,36 @@ export default function InventoryPage() {
           onTransfer={(body) => transfer.mutate(body)}
           onReserve={(body) => reserve.mutate(body)}
         />
+      ) : null}
+      {takeOpen ? (
+        <Modal title="Stock take" onClose={() => setTakeOpen(false)} className="max-w-lg space-y-3">
+          <p className="text-sm text-muted-foreground">Enter counted qty for the filtered location. Variances post as adjustments.</p>
+          <div className="max-h-72 overflow-auto text-sm">
+            {list.rows
+              .filter((r) => !list.extras.locationId || r.locationId === list.extras.locationId)
+              .slice(0, 40)
+              .map((r) => (
+                <div key={r.id} className="mb-2 flex items-center justify-between gap-2">
+                  <span className="truncate">
+                    {r.sku} · sys {r.available}
+                  </span>
+                  <input
+                    className={inputClass + " w-24"}
+                    value={counts[r.id] ?? String(r.available)}
+                    onChange={(e) => setCounts((s) => ({ ...s, [r.id]: e.target.value }))}
+                  />
+                </div>
+              ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className={btnGhost} onClick={() => setTakeOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className={btnPrimary} disabled={stockTake.isPending} onClick={() => stockTake.mutate()}>
+              Post count
+            </button>
+          </div>
+        </Modal>
       ) : null}
     </AppShell>
   );

@@ -45,36 +45,36 @@ export function AppSidebar({
       />
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-sidebar transition-all duration-300 ease-in-out",
+          "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-sidebar transition-all duration-200 ease-out",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-          collapsed ? "lg:w-16" : "lg:w-64",
-          "w-64",
+          collapsed ? "lg:w-sidebar-collapsed" : "lg:w-sidebar",
+          "w-sidebar-mobile",
         )}
       >
-        <div className="flex h-16 items-center justify-between border-b px-3">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-2 font-semibold">
-            <Store className="h-6 w-6 shrink-0 text-primary" />
-            {(!collapsed || open) && <span className={cn("truncate text-xl", collapsed && "lg:hidden")}>Universal POS</span>}
+        <div className="flex h-sidebar-header items-center justify-between border-b px-1.5">
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-1 font-semibold">
+            <Store className="h-4 w-4 shrink-0 text-primary" />
+            {(!collapsed || open) && <span className={cn("text-[13px]", collapsed && "lg:hidden")}>Universal POS</span>}
           </Link>
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={onCloseMobile}>
-            <X className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="h-7 w-7 lg:hidden" onClick={onCloseMobile}>
+            <X className="h-4 w-4" />
           </Button>
         </div>
-        <nav className="flex-1 overflow-y-auto py-2">
+        <nav className="flex-1 overflow-y-auto py-1">
           {loading ? (
-            <div className="mx-3 h-8 animate-pulse rounded bg-muted" />
+            <div className="mx-2 h-7 animate-pulse rounded bg-muted" />
           ) : (
             groups.map((g) => (
-              <div key={g} className="px-3 py-2">
+              <div key={g} className="px-1.5 py-1">
                 <h2
                   className={cn(
-                    "mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+                    "mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground",
                     collapsed && "lg:hidden",
                   )}
                 >
                   {g}
                 </h2>
-                <div className="space-y-1">
+                <div className="space-y-px">
                   {visible
                     .filter((i) => i.group === g)
                     .map((i) => {
@@ -86,13 +86,13 @@ export function AppSidebar({
                           title={i.label}
                           onClick={onCloseMobile}
                           className={cn(
-                            "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
+                            "flex h-8 items-center gap-1 rounded-md px-1.5 text-[12.5px] font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
                             active ? "bg-accent text-accent-foreground" : "text-foreground",
-                            collapsed && "lg:justify-center lg:px-2",
+                            collapsed && "lg:justify-center lg:px-1",
                           )}
                         >
                           <i.icon className="h-4 w-4 shrink-0" />
-                          <span className={cn(collapsed && "lg:hidden")}>{i.label}</span>
+                          <span className={cn("min-w-0 whitespace-normal", collapsed && "lg:hidden")}>{i.label}</span>
                         </Link>
                       );
                     })}
@@ -101,10 +101,10 @@ export function AppSidebar({
             ))
           )}
         </nav>
-        <div className="hidden border-t p-2 lg:block">
-          <Button variant="ghost" className="w-full justify-center gap-2" onClick={onToggleCollapse}>
+        <div className="hidden border-t p-1 lg:block">
+          <Button variant="ghost" className="h-7 w-full justify-center gap-1" onClick={onToggleCollapse}>
             {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            {!collapsed ? <span className="text-xs">Collapse</span> : null}
+            {!collapsed ? <span className="text-[11px]">Collapse</span> : null}
           </Button>
         </div>
       </aside>

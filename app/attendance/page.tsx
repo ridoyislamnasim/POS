@@ -7,13 +7,17 @@ import { api } from "@/lib/api";
 
 export default function AttendancePage() {
   const { me } = useMe();
-  const users = useQuery({ queryKey: ["users"], queryFn: () => api<{ id: string; name: string }[]>("/api/v1/users") });
+  const users = useQuery({ queryKey: ["users-lookup"], queryFn: () => api<{ id: string; name: string }[]>("/api/v1/users?limit=100") });
   return (
     <ResourcePage
       title="Attendance"
       description="Check-in / check-out for cashiers and staff."
       path="/api/v1/staff/attendance"
       queryKey="attendance"
+      canEdit={false}
+      searchPlaceholder="Search employee"
+      dateFilter
+      statusOptions={["PRESENT", "ABSENT", "LATE", "LEAVE", "HALF_DAY"].map((v) => ({ value: v, label: v }))}
       fields={[
         { key: "userId", label: "Employee", type: "select", required: true, options: (users.data ?? []).map((u) => ({ value: u.id, label: u.name })) },
         { key: "branchId", label: "Branch", type: "select", required: true, options: (me?.branches ?? []).map((b) => ({ value: b.id, label: b.name })) },

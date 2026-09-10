@@ -4,13 +4,17 @@ import { FormEvent, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { useMe } from "@/lib/auth";
+import { useVariantOptions } from "@/lib/lookups";
 import { AppShell } from "@/components/app-shell";
 import { Dialog } from "@/components/ui/dialog";
-import { Button, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, inputClass, EmptyState } from "@/components/ui";
-import { toastCreated, toastError } from "@/lib/toast";
-import { moneyCell, statusBadge } from "@/components/erp-page";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ListFrame } from "@/components/ui/list-frame";
+import { Button, Field, PageHeader, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellActions, tableCellNumeric } from "@/components/ui";
+import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
+import { moneyCell, moneyText, statusBadge, sumField } from "@/components/erp-page";
+import { DocumentActions } from "@/components/documents/document-actions";
 
 type PO = {
   id: string;
@@ -23,14 +27,12 @@ type PO = {
 
 export default function PurchaseOrdersPage() {
   const { me } = useMe();
-  const suppliers = useQuery({ queryKey: ["suppliers"], queryFn: () => api<{ id: string; name: string }[]>("/api/v1/suppliers") });
-  const products = useQuery({
-    queryKey: ["products"],
-    queryFn: () => api<{ variants: { id: string; sku: string }[] }[]>("/api/v1/catalog/products"),
-  });
-  const list = useQuery({ queryKey: ["pos"], queryFn: () => api<PO[]>("/api/v1/purchases/orders") });
-  const variants = (products.data ?? []).flatMap((p) => p.variants ?? []);
+  const suppliers = useQuery({ queryKey: ["suppliers-lookup"], queryFn: () => api<{ id: string; name: string }[]>("/api/v1/suppliers?limit=100") });
+  const variantsQ = useVariantOptions();
+  const variants = variantsQ.data ?? [];
+  const list = useServerList<PO>("purchase-orders", "/api/v1/purchases/orders");
   const [open, setOpen] = useState(false);
+  const [cancelRow, setCancelRow] = useState<PO | null>(null);
   const [form, setForm] = useState({ branchId: "", supplierId: "", variantId: "", qty: "1", unitCost: "" });
   const create = useMutation({
     mutationFn: () =>
@@ -49,13 +51,20 @@ export default function PurchaseOrdersPage() {
     },
     onError: (e) => toastError(e, "Could not create purchase order"),
   });
+  const cancelPo = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/purchases/orders/${id}/cancel`, { method: "POST" }),
+    onSuccess: () => {
+      toastSuccess("Purchase order cancelled");
+      setCancelRow(null);
+      list.refetch();
+    },
+    onError: (e) => toastError(e, "Could not cancel purchase order"),
+  });
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     create.mutate();
   }
-
-  const { rows, pager } = usePagedRows(list.data ?? []);
 
   return (
     <AppShell>
@@ -65,30 +74,60 @@ export default function PurchaseOrdersPage() {
           Create PO
         </Button>
       </PageHeader>
-      {!list.data?.length ? <EmptyState title="No purchase orders" hint="Create a PO, then receive it as a purchase." /> : null}
-      <div className="rounded-lg border bg-card">
+      <SummaryCards
+        items={[
+          { label: "Orders", value: list.pager.total, accent: "sky" },
+          { label: "Total", value: moneyText(sumField(list.rows, "total")), accent: "orange", description: "This page" },
+          { label: "Open", value: list.rows.filter((r) => r.status !== "CANCELLED" && r.status !== "RECEIVED").length, accent: "amber" },
+        ]}
+      />
+      <ListFrame
+        list={list}
+        searchPlaceholder="Search PO or supplier"
+        dateFilter
+        statusOptions={[
+          { value: "DRAFT", label: "Draft" },
+          { value: "ORDERED", label: "Ordered" },
+          { value: "PARTIAL", label: "Partial" },
+          { value: "RECEIVED", label: "Received" },
+          { value: "CANCELLED", label: "Cancelled" },
+        ]}
+        columnCount={5}
+        emptyTitle="No records found"
+        emptyHint="Create a PO, then receive it as a purchase."
+      >
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Number</TableHead>
               <TableHead>Supplier</TableHead>
-              <TableHead>Total</TableHead>
+              <TableHead className={tableCellNumeric}>Total</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((p) => (
+            {list.rows.map((p) => (
               <TableRow key={p.id}>
                 <TableCell>{p.number}</TableCell>
                 <TableCell>{p.supplier?.name}</TableCell>
-                <TableCell>{moneyCell(p.total)}</TableCell>
+                <TableCell className={tableCellNumeric}>{moneyCell(p.total)}</TableCell>
                 <TableCell>{statusBadge(p.status)}</TableCell>
+                <TableCell className={tableCellActions}>
+                  <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                    <DocumentActions type="purchase-order" id={p.id} number={p.number} />
+                    {p.status !== "CANCELLED" && p.status !== "RECEIVED" ? (
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setCancelRow(p)}>
+                        Cancel
+                      </Button>
+                    ) : null}
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+      </ListFrame>
       <Dialog
         open={open}
         title="Create purchase order"
@@ -141,6 +180,15 @@ export default function PurchaseOrdersPage() {
           </div>
         </form>
       </Dialog>
+      <ConfirmDialog
+        open={Boolean(cancelRow)}
+        title="Cancel this purchase order?"
+        description={cancelRow ? `${cancelRow.number} will be marked cancelled. Receipts already posted stay.` : "Cancel this PO."}
+        confirmLabel="Cancel PO"
+        loading={cancelPo.isPending}
+        onClose={() => setCancelRow(null)}
+        onConfirm={() => cancelRow && cancelPo.mutate(cancelRow.id)}
+      />
     </AppShell>
   );
 }

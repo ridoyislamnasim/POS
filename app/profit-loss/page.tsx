@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
-import { Kpi, PageHeader, ShellCard, CardHeader, CardTitle, CardContent, Table, TableBody, TableCell, TablePagination, TableRow, ErrorState } from "@/components/ui";
+import { DataTable, ErrorState, PageHeader, SummaryCards, Table, TableBody, TableCell, TablePagination, TableRow } from "@/components/ui";
 import { usePagedRows } from "@/lib/use-pagination";
 
 type PnL = {
@@ -25,38 +25,31 @@ export default function ProfitLossPage() {
     <AppShell>
       <PageHeader title="Profit & Loss" description="Revenue, COGS, expenses, and net for the selected business date." />
       {q.isError ? <ErrorState message={(q.error as Error).message} onRetry={() => q.refetch()} /> : null}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Revenue" value={`৳ ${d?.revenue ?? "0.00"}`} loading={q.isLoading} tone="increase" />
-        <Kpi label="COGS" value={`৳ ${d?.cogs ?? "0.00"}`} loading={q.isLoading} />
-        <Kpi label="Gross profit" value={`৳ ${d?.grossProfit ?? "0.00"}`} loading={q.isLoading} />
-        <Kpi label="Net profit" value={`৳ ${d?.netProfit ?? "0.00"}`} loading={q.isLoading} />
-      </div>
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <ShellCard>
-          <CardHeader><CardTitle>Totals</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div>Tax / VAT: ৳ {d?.tax}</div>
-            <div>Other income: ৳ {d?.otherIncome}</div>
-            <div>Expenses: ৳ {d?.expenses}</div>
-          </CardContent>
-        </ShellCard>
-        <ShellCard>
-          <CardHeader><CardTitle>Expense categories</CardTitle></CardHeader>
-          <CardContent>
-            <Table>
-              <TableBody>
-                {expenseRows.map((e) => (
-                  <TableRow key={e.category}>
-                    <TableCell>{e.category}</TableCell>
-                    <TableCell className="text-right tabular-nums">৳ {e.amount}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <TablePagination {...expensePager} />
-          </CardContent>
-        </ShellCard>
-      </div>
+      <SummaryCards
+        items={[
+          { label: "Revenue", value: `৳ ${d?.revenue ?? "0.00"}`, accent: "emerald", loading: q.isLoading },
+          { label: "COGS", value: `৳ ${d?.cogs ?? "0.00"}`, accent: "amber", loading: q.isLoading },
+          { label: "Gross profit", value: `৳ ${d?.grossProfit ?? "0.00"}`, accent: "lime", loading: q.isLoading },
+          { label: "Tax / VAT", value: `৳ ${d?.tax ?? "0.00"}`, accent: "violet", loading: q.isLoading },
+          { label: "Other income", value: `৳ ${d?.otherIncome ?? "0.00"}`, accent: "sky", loading: q.isLoading },
+          { label: "Expenses", value: `৳ ${d?.expenses ?? "0.00"}`, accent: "rose", loading: q.isLoading },
+          { label: "Net profit", value: `৳ ${d?.netProfit ?? "0.00"}`, accent: "orange", loading: q.isLoading },
+        ]}
+      />
+      <DataTable>
+        <div className="px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Expense categories</div>
+        <Table>
+          <TableBody>
+            {expenseRows.map((e) => (
+              <TableRow key={e.category}>
+                <TableCell>{e.category}</TableCell>
+                <TableCell className="text-right tabular-nums">৳ {e.amount}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        <TablePagination {...expensePager} />
+      </DataTable>
     </AppShell>
   );
 }

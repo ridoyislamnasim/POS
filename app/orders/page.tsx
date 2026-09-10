@@ -4,23 +4,27 @@ import { FormEvent, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { useMe } from "@/lib/auth";
+import { useVariantOptions } from "@/lib/lookups";
 import { AppShell } from "@/components/app-shell";
 import { Dialog } from "@/components/ui/dialog";
-import { Button, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, inputClass, EmptyState } from "@/components/ui";
-import { toastCreated, toastError } from "@/lib/toast";
-import { moneyCell, statusBadge } from "@/components/erp-page";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ListFrame } from "@/components/ui/list-frame";
+import { Button, Field, PageHeader, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellActions, tableCellNumeric } from "@/components/ui";
+import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
+import { moneyCell, moneyText, statusBadge, sumField } from "@/components/erp-page";
 
 type SO = { id: string; number: string; total: string; status: string; customer?: { name: string }; branch: { name: string } };
 
 export default function OrdersPage() {
   const { me } = useMe();
-  const customers = useQuery({ queryKey: ["customers"], queryFn: () => api<{ id: string; name: string }[]>("/api/v1/customers") });
-  const products = useQuery({ queryKey: ["products"], queryFn: () => api<{ variants: { id: string; sku: string }[] }[]>("/api/v1/catalog/products") });
-  const list = useQuery({ queryKey: ["so"], queryFn: () => api<SO[]>("/api/v1/commerce/sales-orders") });
-  const variants = (products.data ?? []).flatMap((p) => p.variants ?? []);
+  const customers = useQuery({ queryKey: ["customers-lookup"], queryFn: () => api<{ id: string; name: string }[]>("/api/v1/customers?limit=100") });
+  const variantsQ = useVariantOptions();
+  const variants = variantsQ.data ?? [];
+  const list = useServerList<SO>("so", "/api/v1/commerce/sales-orders");
   const [open, setOpen] = useState(false);
+  const [cancelRow, setCancelRow] = useState<SO | null>(null);
   const [form, setForm] = useState({ branchId: "", customerId: "", variantId: "", qty: "1" });
   const create = useMutation({
     mutationFn: () =>
@@ -40,11 +44,19 @@ export default function OrdersPage() {
     },
     onError: (e) => toastError(e, "Could not create sales order"),
   });
+  const cancelSo = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/commerce/sales-orders/${id}`, { method: "PATCH", body: JSON.stringify({ status: "CANCELLED" }) }),
+    onSuccess: () => {
+      toastSuccess("Sales order cancelled");
+      setCancelRow(null);
+      list.refetch();
+    },
+    onError: (e) => toastError(e, "Could not cancel sales order"),
+  });
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     create.mutate();
   }
-  const { rows, pager } = usePagedRows(list.data ?? []);
   return (
     <AppShell>
       <PageHeader title="Sales Orders" description="Confirm orders before they hit the register.">
@@ -53,30 +65,58 @@ export default function OrdersPage() {
           Create order
         </Button>
       </PageHeader>
-      {!list.data?.length ? <EmptyState title="No sales orders" hint="Create an order to confirm it before the register." /> : null}
-      <div className="rounded-lg border bg-card">
+      <SummaryCards
+        items={[
+          { label: "Orders", value: list.pager.total, accent: "sky" },
+          { label: "Total", value: moneyText(sumField(list.rows, "total")), accent: "emerald", description: "This page" },
+          { label: "Open", value: list.rows.filter((r) => r.status === "DRAFT" || r.status === "CONFIRMED").length, accent: "amber" },
+        ]}
+      />
+      <ListFrame
+        list={list}
+        searchPlaceholder="Search order or customer"
+        dateFilter
+        statusOptions={[
+          { value: "DRAFT", label: "Draft" },
+          { value: "CONFIRMED", label: "Confirmed" },
+          { value: "CONVERTED", label: "Converted" },
+          { value: "CANCELLED", label: "Cancelled" },
+        ]}
+        columnCount={5}
+        emptyTitle="No records found"
+        emptyHint="Create an order to confirm it before the register."
+      >
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Number</TableHead>
               <TableHead>Customer</TableHead>
-              <TableHead>Total</TableHead>
+              <TableHead className={tableCellNumeric}>Total</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((o) => (
+            {list.rows.map((o) => (
               <TableRow key={o.id}>
                 <TableCell>{o.number}</TableCell>
                 <TableCell>{o.customer?.name ?? "—"}</TableCell>
-                <TableCell>{moneyCell(o.total)}</TableCell>
+                <TableCell className={tableCellNumeric}>{moneyCell(o.total)}</TableCell>
                 <TableCell>{statusBadge(o.status)}</TableCell>
+                <TableCell className={tableCellActions}>
+                  {o.status !== "CANCELLED" && o.status !== "CONVERTED" ? (
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setCancelRow(o)}>
+                      Cancel
+                    </Button>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+      </ListFrame>
       <Dialog
         open={open}
         title="Create sales order"
@@ -130,6 +170,15 @@ export default function OrdersPage() {
           </Field>
         </form>
       </Dialog>
+      <ConfirmDialog
+        open={Boolean(cancelRow)}
+        title="Cancel this sales order?"
+        description={cancelRow ? `${cancelRow.number} will be cancelled.` : "Cancel this order."}
+        confirmLabel="Cancel order"
+        loading={cancelSo.isPending}
+        onClose={() => setCancelRow(null)}
+        onConfirm={() => cancelRow && cancelSo.mutate(cancelRow.id)}
+      />
     </AppShell>
   );
 }

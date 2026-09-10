@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   loading = false,
   variant = "danger",
+  children,
   onConfirm,
   onClose,
 }: {
@@ -22,6 +24,7 @@ export function ConfirmDialog({
   cancelLabel?: string;
   loading?: boolean;
   variant?: "danger" | "warning";
+  children?: ReactNode;
   onConfirm: () => void;
   onClose: () => void;
 }) {
@@ -38,7 +41,7 @@ export function ConfirmDialog({
           </Button>
           <Button
             type="button"
-            variant={variant === "danger" ? "destructive" : "default"}
+            variant={variant === "danger" ? "destructive" : "warning"}
             disabled={loading}
             onClick={onConfirm}
           >
@@ -60,6 +63,7 @@ export function ConfirmDialog({
         </div>
         <p className="pt-1.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
+      {children}
     </Dialog>
   );
 }

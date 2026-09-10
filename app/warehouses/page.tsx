@@ -9,6 +9,7 @@ export default function WarehousesPage() {
       description="Stock locations that are not POS branches."
       path="/api/v1/org/warehouses"
       queryKey="warehouses"
+      searchPlaceholder="Search warehouse"
       fields={[{ key: "name", label: "Warehouse name", required: true }]}
       columns={[
         { key: "name", label: "Name" },

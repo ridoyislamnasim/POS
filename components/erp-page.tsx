@@ -1,32 +1,44 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { FormEvent, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { FormEvent, useCallback, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import {
-  Badge,
   Button,
   EmptyState,
   ErrorState,
   Field,
   PageHeader,
-  Skeleton,
+  DataTable,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
+  TableLoadingSkeleton,
   TablePagination,
   TableRow,
+  TableToolbar,
+  tableCellActions,
+  tableCellNumeric,
   inputClass,
+  SearchInput,
+  DateRangeFilter,
+  FilterSelect,
+  FilterChips,
+  StatusBadge,
+  SummaryCards,
+  type SummaryItem,
 } from "@/components/ui";
-import { toastCreated, toastDeleted, toastError } from "@/lib/toast";
+import { toastCreated, toastDeleted, toastError, toastUpdated } from "@/lib/toast";
+import { emptyHintFor, useHelpCreateAction } from "@/lib/help";
 
 export type ResourceField = {
   key: string;
@@ -34,6 +46,7 @@ export type ResourceField = {
   type?: "text" | "number" | "select" | "textarea" | "date";
   options?: { value: string; label: string }[];
   required?: boolean;
+  createOnly?: boolean;
 };
 
 export type Field = ResourceField;
@@ -42,7 +55,14 @@ export type Column = {
   key: string;
   label: string;
   render?: (row: any) => React.ReactNode;
+  numeric?: boolean;
 };
+
+const NUMERIC_COL = /^(amount|total|due|paid|creditDue|creditLimit|price|qty|points|loyaltyPoints)$/i;
+
+function colAlign(c: Column) {
+  return c.numeric || NUMERIC_COL.test(c.key) ? tableCellNumeric : undefined;
+}
 
 function guessEntity(title: string) {
   const map: Record<string, string> = {
@@ -66,8 +86,14 @@ function rowLabel<T extends { id: string }>(row: T) {
   return String(r.name ?? r.code ?? nested?.name ?? r.number ?? r.vendor ?? r.category ?? r.channel ?? r.id);
 }
 
-function listUrl(path: string) {
-  return `${path}${path.includes("?") ? "&" : "?"}limit=100`;
+function rowToForm<T extends { id: string }>(row: T, fields: ResourceField[]) {
+  const r = row as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const f of fields) {
+    const v = r[f.key];
+    out[f.key] = v == null ? "" : String(v);
+  }
+  return out;
 }
 
 export function ResourcePage<T extends { id: string } = any>({
@@ -82,6 +108,11 @@ export function ResourcePage<T extends { id: string } = any>({
   rowHref,
   entityName,
   canDelete,
+  canEdit,
+  searchPlaceholder,
+  statusOptions,
+  dateFilter,
+  summary,
 }: {
   title: string;
   description: string;
@@ -94,18 +125,25 @@ export function ResourcePage<T extends { id: string } = any>({
   rowHref?: (row: T) => string;
   entityName?: string;
   canDelete?: boolean;
+  canEdit?: boolean;
+  searchPlaceholder?: string;
+  statusOptions?: { value: string; label: string }[];
+  dateFilter?: boolean;
+  summary?: (ctx: { rows: T[]; total: number }) => SummaryItem[];
 }) {
   const entity = entityName ?? guessEntity(title);
+  const pathname = usePathname();
   const allowCreate = Boolean(fields?.length);
   const allowDelete = canDelete ?? allowCreate;
+  const allowEdit = canEdit ?? allowCreate;
   const [form, setForm] = useState<Record<string, string>>({});
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<T | null>(null);
   const [pendingDelete, setPendingDelete] = useState<T | null>(null);
 
-  const list = useQuery({
-    queryKey: [queryKey],
-    queryFn: () => api<T[]>(listUrl(path)),
-  });
+  const visibleFields = (fields ?? []).filter((f) => (editing ? !f.createOnly : true));
+
+  const list = useServerList<T>(queryKey, path);
   const create = useMutation({
     mutationFn: () => api(path, { method: "POST", body: JSON.stringify(transform ? transform(form) : form) }),
     onSuccess: () => {
@@ -115,6 +153,17 @@ export function ResourcePage<T extends { id: string } = any>({
       list.refetch();
     },
     onError: (e) => toastError(e, `Could not create ${entity}`),
+  });
+  const update = useMutation({
+    mutationFn: (id: string) =>
+      api(`${path}/${id}`, { method: "PATCH", body: JSON.stringify(transform ? transform(form) : form) }),
+    onSuccess: () => {
+      toastUpdated(entity);
+      setEditing(null);
+      setForm({});
+      list.refetch();
+    },
+    onError: (e) => toastError(e, `Could not save ${entity}`),
   });
   const remove = useMutation({
     mutationFn: (id: string) => api(`${path}/${id}`, { method: "DELETE" }),
@@ -129,63 +178,117 @@ export function ResourcePage<T extends { id: string } = any>({
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    create.mutate();
+    if (editing) update.mutate(editing.id);
+    else create.mutate();
   }
 
-  const allRows = Array.isArray(list.data) ? list.data : [];
-  const { rows, pager } = usePagedRows(allRows);
+  function openEdit(row: T) {
+    setEditing(row);
+    setForm(rowToForm(row, fields ?? []));
+    setCreateOpen(false);
+  }
+
+  const openCreate = useCallback(() => {
+    setEditing(null);
+    setForm({});
+    setCreateOpen(true);
+  }, []);
+
+  useHelpCreateAction(openCreate, allowCreate);
+
+  const closeDialog = useCallback(() => {
+    setCreateOpen(false);
+    setEditing(null);
+  }, []);
+
+  const dialogOpen = createOpen || Boolean(editing);
+  const pending = create.isPending || update.isPending;
+  const rows = list.rows;
   const addLabel = createLabel ?? `Add ${entity}`;
+  const showActions = Boolean(rowHref || allowDelete || allowEdit);
+  const emptyTitle = list.hasFilters ? "No records match your current filters." : "No records found";
 
   return (
     <AppShell>
       <PageHeader title={title} description={description}>
         {allowCreate ? (
-          <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Button type="button" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             {addLabel}
           </Button>
         ) : null}
       </PageHeader>
-      {list.isLoading ? <Skeleton rows={8} /> : null}
-      {list.isError ? <ErrorState message={(list.error as Error).message} onRetry={() => list.refetch()} /> : null}
-      {!list.isLoading && !rows.length ? (
-        <EmptyState
-          title="No records yet"
-          hint={allowCreate ? `Use ${addLabel} to create the first one.` : undefined}
-          action={
-            allowCreate ? (
-              <Button type="button" onClick={() => setCreateOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                {addLabel}
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : null}
-      <div className="rounded-lg border bg-card shadow-sm">
+      {summary ? <SummaryCards items={summary({ rows, total: list.pager.total })} /> : null}
+      {list.isLoading ? <TableLoadingSkeleton columns={Math.max(columns.length, 3) + (showActions ? 1 : 0)} rows={8} /> : null}
+      {list.isError && !rows.length ? <ErrorState message={(list.error as Error).message} onRetry={() => list.refetch()} /> : null}
+      {!list.isLoading ? (
+      <DataTable>
+        <TableToolbar>
+          <SearchInput
+            value={list.draft}
+            onChange={list.setDraft}
+            placeholder={searchPlaceholder ?? "Search…"}
+            loading={list.searching || (list.isFetching && !list.isLoading)}
+          />
+          {statusOptions?.length ? (
+            <FilterSelect value={list.status} onChange={(v) => list.setFilter("status", v)} options={statusOptions} placeholder="Status" />
+          ) : null}
+          {dateFilter ? <DateRangeFilter from={list.from} to={list.to} onChange={(k, v) => list.setFilter(k, v)} /> : null}
+          {list.hasFilters ? (
+            <Button type="button" variant="ghost" size="sm" className="h-8" onClick={list.reset}>
+              Reset
+            </Button>
+          ) : null}
+        </TableToolbar>
+        <FilterChips chips={list.activeFilters} onRemove={(k) => (k === "search" ? list.setDraft("") : list.setFilter(k, ""))} onClear={list.reset} />
+        {list.isError ? <div className="px-3 py-2"><ErrorState message={(list.error as Error).message} onRetry={() => list.refetch()} /></div> : null}
+        {!rows.length ? (
+          <EmptyState
+            title={emptyTitle}
+            hint={list.hasFilters ? "Try clearing filters or searching something else." : emptyHintFor(pathname) ?? (allowCreate ? `Use ${addLabel} to create the first one.` : undefined)}
+            action={
+              list.hasFilters ? (
+                <Button type="button" variant="outline" size="sm" onClick={list.reset}>
+                  Clear filters
+                </Button>
+              ) : allowCreate ? (
+                <Button type="button" onClick={openCreate}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {addLabel}
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
         <Table>
           <TableHeader>
             <TableRow>
               {columns.map((c) => (
-                <TableHead key={c.key}>{c.label}</TableHead>
+                <TableHead key={c.key} className={colAlign(c)}>{c.label}</TableHead>
               ))}
-              {rowHref || allowDelete ? <TableHead className="w-[1%] text-right">Actions</TableHead> : null}
+              {showActions ? <TableHead className="w-[1%] text-right">Actions</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.id}>
                 {columns.map((c) => (
-                  <TableCell key={c.key}>
+                  <TableCell key={c.key} className={colAlign(c)}>
                     {c.render ? c.render(row) : String((row as Record<string, unknown>)[c.key] ?? "—")}
                   </TableCell>
                 ))}
-                {rowHref || allowDelete ? (
-                  <TableCell className="whitespace-nowrap text-right">
+                {showActions ? (
+                  <TableCell className={tableCellActions}>
                     {rowHref ? (
                       <Link href={rowHref(row)} className="mr-2 text-sm font-medium text-primary underline-offset-4 hover:underline">
                         Open
                       </Link>
+                    ) : null}
+                    {allowEdit ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(row)}>
+                        <Pencil className="mr-1 h-3.5 w-3.5" />
+                        Edit
+                      </Button>
                     ) : null}
                     {allowDelete ? (
                       <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setPendingDelete(row)}>
@@ -199,34 +302,40 @@ export function ResourcePage<T extends { id: string } = any>({
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+        )}
+        <TablePagination {...list.pager} />
+      </DataTable>
+      ) : null}
 
       <Dialog
-        open={createOpen}
-        title={addLabel}
-        description={`Fill in the details and save. Required fields are marked.`}
+        open={dialogOpen}
+        title={editing ? `Edit ${entity}` : addLabel}
+        description={editing ? "Update the fields and save." : "Fill in the details and save. Required fields are marked."}
         size="lg"
-        onClose={() => setCreateOpen(false)}
+        onClose={closeDialog}
         footer={
           <>
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDialog}
+            >
               Cancel
             </Button>
-            <Button type="submit" form="resource-create-form" disabled={create.isPending}>
-              {create.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {create.isPending ? "Saving…" : `Create ${entity}`}
+            <Button type="submit" form="resource-form" disabled={pending}>
+              {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {pending ? "Saving…" : editing ? `Save ${entity}` : `Create ${entity}`}
             </Button>
           </>
         }
       >
-        <form id="resource-create-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onSubmit}>
-          {(fields ?? []).map((f) => (
-            <Field key={f.key} label={`${f.label}${f.required ? " *" : ""}`}>
+        <form id="resource-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onSubmit}>
+          {visibleFields.map((f) => (
+            <Field key={f.key} label={`${f.label}${f.required && !editing ? " *" : ""}`}>
               {f.type === "select" ? (
                 <select
                   className={inputClass}
-                  required={f.required}
+                  required={f.required && !editing}
                   value={form[f.key] ?? ""}
                   onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
                 >
@@ -249,7 +358,7 @@ export function ResourcePage<T extends { id: string } = any>({
                   className={inputClass}
                   type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
                   placeholder={f.label}
-                  required={f.required}
+                  required={f.required && !editing}
                   value={form[f.key] ?? ""}
                   onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
                 />
@@ -276,11 +385,19 @@ export function ResourcePage<T extends { id: string } = any>({
   );
 }
 
-export function moneyCell(v: unknown) {
+export function moneyText(v: unknown) {
   const n = Number(v ?? 0);
-  return <span className="tabular-nums">৳ {Number.isFinite(n) ? n.toFixed(2) : "0.00"}</span>;
+  return `৳ ${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
+}
+
+export function sumField<T>(rows: T[], key: string) {
+  return rows.reduce((n, row) => n + Number((row as Record<string, unknown>)[key] ?? 0), 0);
+}
+
+export function moneyCell(v: unknown) {
+  return <span className="tabular-nums">{moneyText(v)}</span>;
 }
 
 export function statusBadge(v: unknown) {
-  return <Badge variant="secondary">{String(v ?? "—")}</Badge>;
+  return <StatusBadge value={v} />;
 }

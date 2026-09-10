@@ -9,9 +9,10 @@ export default function BranchesPage() {
       description="Outlets with their own inventory, users, and sales."
       path="/api/v1/org/branches"
       queryKey="branches"
+      searchPlaceholder="Search branch"
       fields={[
         { key: "name", label: "Name", required: true },
-        { key: "code", label: "Code", required: true },
+        { key: "code", label: "Code", required: true, createOnly: true },
       ]}
       columns={[
         { key: "name", label: "Name" },

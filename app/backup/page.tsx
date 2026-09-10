@@ -1,16 +1,20 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
-import { Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, Badge } from "@/components/ui";
+import { ListFrame } from "@/components/ui/list-frame";
+import { Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, StatusBadge, tableCellNumeric } from "@/components/ui";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastError, toastSuccess } from "@/lib/toast";
 
 type Rec = { id: string; status: string; payloadSize: number; createdAt: string; note?: string };
 
 export default function BackupPage() {
-  const list = useQuery({ queryKey: ["backups"], queryFn: () => api<Rec[]>("/api/v1/saas/backups") });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const list = useServerList<Rec>("backups", "/api/v1/saas/backups");
   const run = useMutation({
     mutationFn: () => api<{ record: Rec; payload: unknown }>("/api/v1/saas/backup", { method: "POST", body: JSON.stringify({ note: "manual" }) }),
     onSuccess: (data) => {
@@ -26,33 +30,41 @@ export default function BackupPage() {
     },
     onError: (e) => toastError(e, "Backup failed"),
   });
-  const { rows, pager } = usePagedRows(list.data);
   return (
     <AppShell>
       <PageHeader title="Backup & Restore" description="Export tenant master data. Restore is a file re-import via Import / Export.">
-        <Button onClick={() => run.mutate()}>Run backup</Button>
+        <Button onClick={() => setConfirmOpen(true)}>Run backup</Button>
       </PageHeader>
-      <div className="rounded-lg border bg-card">
+      <ListFrame list={list} searchPlaceholder="Search backups" dateFilter columnCount={3} emptyTitle="No records found">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>When</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Size</TableHead>
+              <TableHead className={tableCellNumeric}>Size</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => (
+            {list.rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
-                <TableCell><Badge>{r.status}</Badge></TableCell>
-                <TableCell>{r.payloadSize} bytes</TableCell>
+                <TableCell><StatusBadge value={r.status} /></TableCell>
+                <TableCell className={tableCellNumeric}>{r.payloadSize} bytes</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+      </ListFrame>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Run a backup now?"
+        description="A JSON snapshot of tenant master data will download on this computer."
+        confirmLabel="Run backup"
+        variant="warning"
+        loading={run.isPending}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => run.mutate()}
+      />
     </AppShell>
   );
 }

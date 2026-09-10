@@ -9,6 +9,11 @@ export default function SuppliersPage() {
       description="Vendor master, purchase history, and outstanding payables."
       path="/api/v1/suppliers"
       queryKey="suppliers"
+      searchPlaceholder="Search name, phone, email"
+      statusOptions={[
+        { value: "ACTIVE", label: "Active" },
+        { value: "INACTIVE", label: "Inactive" },
+      ]}
       fields={[
         { key: "name", label: "Name", required: true },
         { key: "phone", label: "Phone" },

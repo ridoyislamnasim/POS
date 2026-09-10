@@ -9,6 +9,10 @@ export default function EcommercePage() {
       description="Inbound tickets from an online store or marketplace."
       path="/api/v1/commerce/ecommerce"
       queryKey="ecom"
+      canEdit={false}
+      searchPlaceholder="Search channel or order id"
+      dateFilter
+      statusOptions={["CONFIRMED", "PACKED", "SHIPPED", "DELIVERED", "CANCELLED"].map((v) => ({ value: v, label: v }))}
       fields={[
         { key: "channel", label: "Channel", required: true },
         { key: "externalId", label: "External ID", required: true },

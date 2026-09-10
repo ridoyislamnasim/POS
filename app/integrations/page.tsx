@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
-import { Button, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, Badge } from "@/components/ui";
+import { Button, DataTable, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, Badge, tableCellActions } from "@/components/ui";
 import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
 
 type Key = { id: string; name: string; keyPrefix: string; revokedAt?: string; createdAt: string; secret?: string };
@@ -57,7 +57,7 @@ export default function IntegrationsPage() {
           <span className="mt-1 block font-sans text-xs text-muted-foreground">Copy this secret now. It will not be shown again.</span>
         </p>
       ) : null}
-      <div className="rounded-lg border bg-card">
+      <DataTable>
         <Table>
           <TableHeader>
             <TableRow>
@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
                 <TableCell>{k.name}</TableCell>
                 <TableCell className="font-mono text-xs">{k.keyPrefix}</TableCell>
                 <TableCell>{k.revokedAt ? <Badge variant="secondary">Revoked</Badge> : <Badge variant="success">Active</Badge>}</TableCell>
-                <TableCell className="text-right">
+                <TableCell className={tableCellActions}>
                   {!k.revokedAt ? (
                     <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setPending(k)}>
                       Revoke
@@ -84,7 +84,7 @@ export default function IntegrationsPage() {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </DataTable>
 
       <Dialog
         open={createOpen}

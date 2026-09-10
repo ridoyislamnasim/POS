@@ -1,11 +1,15 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
+import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
-import { PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, EmptyState } from "@/components/ui";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ListFrame } from "@/components/ui/list-frame";
+import { Button, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellActions } from "@/components/ui";
 import { statusBadge } from "@/components/erp-page";
+import { toastError, toastSuccess } from "@/lib/toast";
+import { useState } from "react";
 
 type Shift = {
   id: string;
@@ -20,13 +24,36 @@ type Shift = {
 };
 
 export default function ShiftsPage() {
-  const q = useQuery({ queryKey: ["shifts"], queryFn: () => api<Shift[]>("/api/v1/shifts") });
-  const { rows, pager } = usePagedRows(q.data);
+  const list = useServerList<Shift>("shifts", "/api/v1/shifts");
+  const [pending, setPending] = useState<Shift | null>(null);
+  const [closingCash, setClosingCash] = useState("");
+  const closeShift = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/shifts/${pending!.id}/close`, {
+        method: "POST",
+        body: JSON.stringify({ closingCash: closingCash || undefined }),
+      }),
+    onSuccess: () => {
+      toastSuccess("Shift closed");
+      setPending(null);
+      list.refetch();
+    },
+    onError: (e) => toastError(e, "Could not close shift"),
+  });
   return (
     <AppShell>
-      <PageHeader title="Shift Management" description="Open and closed register sessions. Templates live with staff settings." />
-      {!q.data?.length ? <EmptyState title="No shifts yet" /> : null}
-      <div className="rounded-lg border bg-card">
+      <PageHeader title="Shift Management" description="Open and closed register sessions. Close a till from here or from POS." />
+      <ListFrame
+        list={list}
+        searchPlaceholder="Search cashier or branch"
+        dateFilter
+        statusOptions={[
+          { value: "OPEN", label: "Open" },
+          { value: "CLOSED", label: "Closed" },
+        ]}
+        columnCount={6}
+        emptyTitle="No records found"
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -35,22 +62,52 @@ export default function ShiftsPage() {
               <TableHead>Register</TableHead>
               <TableHead>Opened</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((s) => (
+            {list.rows.map((s) => (
               <TableRow key={s.id}>
                 <TableCell>{s.cashier?.name}</TableCell>
                 <TableCell>{s.branch?.name}</TableCell>
                 <TableCell>{s.register?.name}</TableCell>
                 <TableCell>{new Date(s.openedAt).toLocaleString()}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
+                <TableCell className={tableCellActions}>
+                  {s.status === "OPEN" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setClosingCash("");
+                        setPending(s);
+                      }}
+                    >
+                      Close
+                    </Button>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        <TablePagination {...pager} />
-      </div>
+      </ListFrame>
+      <ConfirmDialog
+        open={Boolean(pending)}
+        title="Close this shift?"
+        description={pending ? `${pending.cashier?.name} · ${pending.branch?.name}. Counted cash is optional; expected float is used if empty.` : "Close the register."}
+        confirmLabel="Close shift"
+        variant="warning"
+        loading={closeShift.isPending}
+        onClose={() => setPending(null)}
+        onConfirm={() => closeShift.mutate()}
+      >
+        <Field label="Counted cash">
+          <input className={inputClass} type="number" placeholder="Optional" value={closingCash} onChange={(e) => setClosingCash(e.target.value)} />
+        </Field>
+      </ConfirmDialog>
     </AppShell>
   );
 }

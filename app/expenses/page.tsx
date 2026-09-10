@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { ResourcePage, moneyCell, statusBadge } from "@/components/erp-page";
+import { ResourcePage, moneyCell, moneyText, statusBadge, sumField } from "@/components/erp-page";
 import { useMe } from "@/lib/auth";
 
 export default function ExpensesPage() {
@@ -17,6 +17,18 @@ export default function ExpensesPage() {
       description="Posted operating expenses by category and branch."
       path="/api/v1/finance/expenses"
       queryKey="expenses"
+      searchPlaceholder="Search vendor or notes"
+      dateFilter
+      summary={({ rows, total }) => [
+        { label: "Records", value: total, accent: "sky" },
+        { label: "Amount", value: moneyText(sumField(rows, "amount")), accent: "rose", description: "This page" },
+        { label: "Posted", value: rows.filter((r) => (r as { status?: string }).status === "POSTED").length, accent: "emerald" },
+      ]}
+      statusOptions={[
+        { value: "POSTED", label: "Posted" },
+        { value: "DRAFT", label: "Draft" },
+        { value: "VOIDED", label: "Voided" },
+      ]}
       fields={[
         { key: "categoryId", label: "Category", type: "select", required: true, options: (cats.data ?? []).map((c) => ({ value: c.id, label: c.name })) },
         { key: "amount", label: "Amount", type: "number", required: true },

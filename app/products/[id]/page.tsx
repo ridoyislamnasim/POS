@@ -4,53 +4,35 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api";
-import { usePagedRows } from "@/lib/use-pagination";
 import { AppShell } from "@/components/app-shell";
-import { Card, EmptyState, ErrorState, Field, PageHeader, Skeleton, TablePagination, btnGhost, btnPrimary, inputClass } from "@/components/ui";
+import {
+  DataTable,
+  ErrorState,
+  PageHeader,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  btnGhost,
+  inputClass,
+  tableCellNumeric,
+} from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { toastError, toastSuccess } from "@/lib/toast";
-
-type Product = {
-  id: string;
-  name: string;
-  code: string;
-  category: string | null;
-  status: string;
-  variants: {
-    id: string;
-    sku: string;
-    price: string;
-    cost: string;
-    status: string;
-    attributes: { option: { label: string } }[];
-    barcodes: { id: string; code: string; primary: boolean }[];
-  }[];
-};
+import { ProductForm, type ProductLoaded } from "@/components/catalog/product-form";
+import { printBarcodeLabels } from "@/lib/print-barcodes";
+import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const product = useQuery({
     queryKey: ["product", id],
-    queryFn: () => api<Product>(`/api/v1/catalog/products/${id}`),
+    queryFn: () => api<ProductLoaded>(`/api/v1/catalog/products/${id}`),
   });
-  const [name, setName] = useState("");
-  const [barcodeFor, setBarcodeFor] = useState<string | null>(null);
-  const [barcode, setBarcode] = useState("");
   const [archiveOpen, setArchiveOpen] = useState(false);
-
-  const save = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/catalog/products/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: name || product.data?.name }),
-      }),
-    onSuccess: () => {
-      toastSuccess("Product updated");
-      qc.invalidateQueries({ queryKey: ["product", id] });
-    },
-    onError: (e) => toastError(e),
-  });
   const archive = useMutation({
     mutationFn: () => api(`/api/v1/catalog/products/${id}/archive`, { method: "POST" }),
     onSuccess: () => {
@@ -61,7 +43,7 @@ export default function ProductDetailPage() {
     onError: (e) => toastError(e),
   });
   const patchVariant = useMutation({
-    mutationFn: (input: { id: string; sku?: string; price?: string; cost?: string }) =>
+    mutationFn: (input: { id: string; sku?: string; price?: string; cost?: string; status?: string }) =>
       api(`/api/v1/catalog/variants/${input.id}`, { method: "PATCH", body: JSON.stringify(input) }),
     onSuccess: () => {
       toastSuccess("Variant updated");
@@ -69,26 +51,11 @@ export default function ProductDetailPage() {
     },
     onError: (e) => toastError(e),
   });
-  const { rows, pager } = usePagedRows(product.data?.variants ?? []);
-  const addBarcode = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/catalog/variants/${barcodeFor}/barcodes`, {
-        method: "POST",
-        body: JSON.stringify({ code: barcode, primary: true }),
-      }),
-    onSuccess: () => {
-      toastSuccess("Barcode saved");
-      setBarcode("");
-      setBarcodeFor(null);
-      qc.invalidateQueries({ queryKey: ["product", id] });
-    },
-    onError: (e) => toastError(e, "Could not save barcode"),
-  });
 
   if (product.isLoading) {
     return (
       <AppShell>
-        <Skeleton rows={8} />
+        <Skeleton rows={10} />
       </AppShell>
     );
   }
@@ -103,9 +70,25 @@ export default function ProductDetailPage() {
 
   return (
     <AppShell>
-      <PageHeader title={p.name}>
-        <button type="button" className={btnPrimary} onClick={() => save.mutate()}>
-          Save
+      <PageHeader title={p.name} description={`${p.code} · ${p.type}`}>
+        <button
+          type="button"
+          className={btnGhost}
+          onClick={() => {
+            const labels = (p.variants ?? []).flatMap((v) => {
+              const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
+              return codes.map((code) => ({
+                code,
+                sku: v.sku,
+                name: p.name,
+                price: Number(v.price).toFixed(2),
+                kind: "CODE128",
+              }));
+            });
+            if (!printBarcodeLabels(labels)) toastWarn("Allow pop-ups to print barcode labels");
+          }}
+        >
+          Print barcodes
         </button>
         {p.status !== "ARCHIVED" ? (
           <button type="button" className={btnGhost} onClick={() => setArchiveOpen(true)}>
@@ -113,80 +96,64 @@ export default function ProductDetailPage() {
           </button>
         ) : null}
       </PageHeader>
-      <Card className="mb-3 grid gap-3 md:grid-cols-3">
-        <Field label="Name">
-          <input className={inputClass} defaultValue={p.name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Code">
-          <input className={inputClass} value={p.code} readOnly />
-        </Field>
-        <Field label="Status">
-          <input className={inputClass} value={p.status} readOnly />
-        </Field>
-      </Card>
-      {!p.variants.length ? <EmptyState title="No variants" hint="Generate Colour × Size from New product." /> : null}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead>
-            <tr className="text-left text-xs text-muted-foreground">
-              <th className="py-2">Variant</th>
-              <th>SKU</th>
-              <th>Barcode</th>
-              <th>Price</th>
-              <th>Cost</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((v) => (
-              <tr key={v.id} className="border-t border-line">
-                <td className="py-2">{v.attributes.map((a) => a.option.label).join(" / ") || "—"}</td>
-                <td>
-                  <input
-                    className={inputClass + " w-40"}
-                    defaultValue={v.sku}
-                    onBlur={(e) => e.target.value !== v.sku && patchVariant.mutate({ id: v.id, sku: e.target.value })}
-                  />
-                </td>
-                <td>
-                  {v.barcodes.map((b) => b.code).join(", ") || "—"}
-                  <button type="button" className="ml-2 text-xs underline" onClick={() => setBarcodeFor(v.id)}>
-                    Add
-                  </button>
-                </td>
-                <td>
-                  <input
-                    className={inputClass + " w-24"}
-                    defaultValue={v.price}
-                    onBlur={(e) => e.target.value !== v.price && patchVariant.mutate({ id: v.id, price: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    className={inputClass + " w-24"}
-                    defaultValue={v.cost}
-                    onBlur={(e) => e.target.value !== v.cost && patchVariant.mutate({ id: v.id, cost: e.target.value })}
-                  />
-                </td>
-                <td className="text-xs text-muted-foreground">{v.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <TablePagination {...pager} />
-      </div>
-      {barcodeFor ? (
-        <Card className="mt-3 flex max-w-md items-end gap-2">
-          <Field label="New barcode">
-            <input className={inputClass} value={barcode} onChange={(e) => setBarcode(e.target.value)} />
-          </Field>
-          <button type="button" className={btnPrimary} onClick={() => addBarcode.mutate()}>
-            Save
-          </button>
-          <button type="button" className={btnGhost} onClick={() => setBarcodeFor(null)}>
-            Cancel
-          </button>
-        </Card>
+      <ProductForm product={p} />
+      {(p.variants ?? []).length ? (
+        <DataTable className="mt-3">
+          <div className="border-b border-border px-2 py-1.5 sm:px-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Saved variants</h3>
+          </div>
+          <Table className="min-w-[720px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Variant</TableHead>
+                <TableHead>SKU</TableHead>
+                <TableHead>Barcode</TableHead>
+                <TableHead className={tableCellNumeric}>Price</TableHead>
+                <TableHead className={tableCellNumeric}>Cost</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {p.variants!.map((v) => (
+                <TableRow key={v.id}>
+                  <TableCell>{v.attributes.map((a) => a.option.label).join(" / ") || "Default"}</TableCell>
+                  <TableCell>
+                    <input
+                      className={inputClass + " h-8 w-36 text-xs"}
+                      defaultValue={v.sku}
+                      onBlur={(e) => e.target.value !== v.sku && patchVariant.mutate({ id: v.id, sku: e.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell className="text-xs">{v.barcodes.map((b) => b.code).join(", ") || "—"}</TableCell>
+                  <TableCell>
+                    <input
+                      className={inputClass + " h-8 w-24 text-xs"}
+                      defaultValue={v.price}
+                      onBlur={(e) => e.target.value !== v.price && patchVariant.mutate({ id: v.id, price: e.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      className={inputClass + " h-8 w-24 text-xs"}
+                      defaultValue={v.cost}
+                      onBlur={(e) => e.target.value !== v.cost && patchVariant.mutate({ id: v.id, cost: e.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <select
+                      className={inputClass + " h-8 w-28 text-xs"}
+                      defaultValue={v.status}
+                      onChange={(e) => patchVariant.mutate({ id: v.id, status: e.target.value })}
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DataTable>
       ) : null}
       <ConfirmDialog
         open={archiveOpen}
