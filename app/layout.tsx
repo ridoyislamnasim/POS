@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -28,7 +29,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeBoot }} />
       </head>
       <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Suspense fallback={<div className="min-h-screen bg-background" />}>
+            {children}
+          </Suspense>
+        </Providers>
       </body>
     </html>
   );
