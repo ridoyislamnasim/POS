@@ -24,6 +24,7 @@ import {
   tableSubText,
 } from "@/components/ui";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 import { moneyText, sumField } from "@/components/erp-page";
 
 type Sale = {
@@ -34,7 +35,9 @@ type Sale = {
   createdAt: string;
   status: string;
   branch: { name: string };
-  customer?: { name: string; phone: string } | null;
+  customer?: { id: string; name: string; phone: string } | null;
+  due?: string;
+  paid?: string;
 };
 
 type Me = { permissions: string[] };
@@ -115,6 +118,20 @@ export default function SalesPage() {
                       Open
                     </Button>
                     <DocumentActions type="sale" id={s.id} number={s.invoiceNumber} />
+                    {s.customer ? (
+                      <SendSmsButton
+                        target={{
+                          recipientType: "CUSTOMER",
+                          recipientId: s.customer.id,
+                          phone: s.customer.phone,
+                          name: s.customer.name,
+                          referenceType: "Sale",
+                          referenceId: s.id,
+                          templateKey: "SALE_CONFIRMATION",
+                          vars: { invoiceNo: s.invoiceNumber, amount: s.total, dueAmount: s.due, paidAmount: s.paid },
+                        }}
+                      />
+                    ) : null}
                   </div>
                 </TableCell>
               </TableRow>

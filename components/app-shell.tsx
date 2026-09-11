@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { api } from "@/lib/api";
@@ -107,6 +108,7 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
           collapsed={collapsed}
           isDesktop={isDesktop}
           can={can}
+          isPlatform={Boolean(me?.isPlatform)}
           loading={isLoading}
           onCloseMobile={() => setOpen(false)}
           onToggleCollapse={toggleCollapse}
@@ -136,7 +138,22 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
         transition={layoutTransition}
       >
         <main className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto print:overflow-visible", pos ? "p-0" : "p-3 md:p-4")}>
-          {children}
+          {me && !me.isPlatform && me.apiAccessEnabled === false && path !== "/subscription" && path !== "/login" ? (
+            <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center gap-4 px-4 text-center">
+              <h1 className="text-xl font-semibold tracking-tight">Access paused</h1>
+              <p className="text-sm text-muted-foreground">
+                {me.lockMessage || "Please pay your previous month's bill to continue using the platform."}
+              </p>
+              <Link
+                href="/subscription"
+                className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
+              >
+                View bills
+              </Link>
+            </div>
+          ) : (
+            children
+          )}
         </main>
       </motion.div>
       </div>

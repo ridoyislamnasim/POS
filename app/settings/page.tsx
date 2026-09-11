@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
@@ -167,6 +168,7 @@ export default function SettingsPage() {
             </select>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(form.whatsappEnabled)} onChange={(e) => setForm((s) => ({ ...s, whatsappEnabled: e.target.checked }))} /> WhatsApp invoices</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(form.smsEnabled)} onChange={(e) => setForm((s) => ({ ...s, smsEnabled: e.target.checked }))} /> SMS notifications</label>
+            <Link href="/sms" className="text-xs text-highlight underline-offset-2 hover:underline">Open SMS dashboard, templates, and provider settings</Link>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(form.emailEnabled)} onChange={(e) => setForm((s) => ({ ...s, emailEnabled: e.target.checked }))} /> Email invoice</label>
             <div className="mt-2 text-xs font-semibold text-muted-foreground">In-app alerts</div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.alertInApp !== false} onChange={(e) => setForm((s) => ({ ...s, alertInApp: e.target.checked }))} /> In-app inbox</label>

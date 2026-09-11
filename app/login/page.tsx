@@ -27,15 +27,20 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const data = await api<{ user: { roles?: string[] } }>("/api/v1/auth/login", {
+      const data = await api<{ user: { roles?: string[]; isPlatform?: boolean } }>("/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
       toastSuccess("Signed in");
-      const me = await api<{ permissions: string[] }>("/api/v1/auth/me").catch(() => null);
+      const me = await api<{ permissions: string[]; isPlatform?: boolean }>("/api/v1/auth/me").catch(() => null);
       const roles = data.user?.roles ?? [];
-      if (me?.permissions.includes("report.view") || roles.includes("TENANT_OWNER")) router.push("/dashboard?welcome=1");
-      else router.push("/pos?welcome=1");
+      if (me?.isPlatform || data.user?.isPlatform || roles.includes("PLATFORM_SUPER_ADMIN")) {
+        router.push("/platform/tenants?welcome=1");
+      } else if (me?.permissions.includes("report.view") || roles.includes("TENANT_OWNER")) {
+        router.push("/dashboard?welcome=1");
+      } else {
+        router.push("/pos?welcome=1");
+      }
     } catch (err) {
       const msg = getApiErrorMessage(err, "Sign in failed");
       setError(msg);

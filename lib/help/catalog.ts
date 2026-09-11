@@ -31,6 +31,7 @@ export const GROUP_BLURBS: Record<string, string> = {
   "Staff & Security": "Logins, roles, shifts, and audit.",
   Reports: "Live figures — not sample data.",
   Commerce: "Online orders, delivery, alerts.",
+  Platform: "Tenant billing, invoices, and API access.",
   Organization: "Business profile, branches, billing.",
   Settings: "Tax, printers, import, theme.",
   Help: "Guides, search, and what your role can do.",
@@ -457,7 +458,10 @@ const DRAFTS: Draft[] = [
     href: "/notifications",
     blurb: "Inbox for stock, sales, and operational alerts.",
     canDo: ["Mark read", "Send a manual note if allowed"],
-    next: [{ href: "/settings", label: "Alert toggles", permission: "settings.manage" }],
+    next: [
+      { href: "/sms", label: "SMS module", permission: "sms.view" },
+      { href: "/settings", label: "Alert toggles", permission: "settings.manage" },
+    ],
     emptyHint: "Low stock, sales, and other alerts land here.",
     keywords: ["inbox", "alert"],
   },
@@ -488,10 +492,24 @@ const DRAFTS: Draft[] = [
     keywords: ["location"],
   },
   {
+    href: "/platform/tenants",
+    blurb: "Every SaaS shop: plan, unpaid invoices, and API access.",
+    canDo: ["Disable or restore a tenant API", "Open a tenant billing history"],
+    keywords: ["tenant", "suspend", "api"],
+    permission: null,
+  },
+  {
+    href: "/platform/invoices",
+    blurb: "Create, send, and mark platform invoices for tenants.",
+    canDo: ["Create an invoice", "Send it", "Mark paid and send a receipt"],
+    keywords: ["invoice", "overdue", "receipt"],
+    permission: null,
+  },
+  {
     href: "/subscription",
-    blurb: "Plan, feature limits, and current usage.",
-    canDo: ["See the plan and limits"],
-    keywords: ["billing", "plan"],
+    blurb: "Plan, feature limits, current usage, and bills from the platform.",
+    canDo: ["See the plan and limits", "Download a platform invoice"],
+    keywords: ["billing", "plan", "invoice"],
   },
   {
     href: "/integrations",
@@ -509,10 +527,23 @@ const DRAFTS: Draft[] = [
     keywords: ["export"],
   },
   {
+    href: "/sms",
+    blurb: "Tenant SMS templates, logs, and provider settings. Never shared across shops.",
+    canDo: ["Send a customer or supplier SMS", "Edit Bangla/English templates", "Read delivery logs"],
+    next: [
+      { href: "/settings", label: "Master SMS toggle", permission: "settings.manage" },
+      { href: "/notifications", label: "In-app inbox", permission: "notification.view" },
+    ],
+    keywords: ["sms", "template", "otp", "bangla"],
+  },
+  {
     href: "/settings",
     blurb: "Business profile extras: currency, tax, printers, payments, notifications, language, theme.",
     canDo: ["Set VAT and receipt width", "Toggle which alerts fire"],
-    next: [{ href: "/organization", label: "Legal profile", permission: "tenant.manage" }],
+    next: [
+      { href: "/sms", label: "SMS module", permission: "sms.view" },
+      { href: "/organization", label: "Legal profile", permission: "tenant.manage" },
+    ],
     keywords: ["tax", "printer", "theme"],
   },
   {

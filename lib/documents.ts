@@ -154,6 +154,22 @@ export async function downloadPosDocument(type: PosDocumentType, id: string, fal
   URL.revokeObjectURL(url);
 }
 
+export async function downloadPlatformInvoice(id: string, kind: "invoice" | "receipt" = "invoice", fallbackName?: string) {
+  const path =
+    kind === "receipt"
+      ? `/api/v1/platform-billing/invoices/${id}/receipt.pdf`
+      : `/api/v1/platform-billing/invoices/${id}/pdf`;
+  const res = await fetchDoc(path);
+  const blob = await res.blob();
+  const name = filenameFrom(res, fallbackName || `platform-${kind}.pdf`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name.endsWith(".pdf") ? name : `${name}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export type DocumentPayload = {
   title: string;
   number: string;

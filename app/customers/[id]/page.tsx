@@ -11,6 +11,7 @@ import { usePagedRows } from "@/lib/use-pagination";
 import { toastError, toastSuccess, toastUpdated } from "@/lib/toast";
 import { moneyCell } from "@/components/erp-page";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 import { useState } from "react";
 
 type Profile = {
@@ -77,6 +78,20 @@ export default function CustomerProfilePage() {
         >
           Edit
         </Button>
+        {c ? (
+          <SendSmsButton
+            size="sm"
+            label="Send SMS"
+            target={{
+              recipientType: "CUSTOMER",
+              recipientId: c.id,
+              phone: c.phone,
+              name: c.name,
+              templateKey: "MANUAL_CUSTOMER",
+              vars: { dueAmount: String(c.creditDue ?? "0") },
+            }}
+          />
+        ) : null}
       </PageHeader>
       <div className="grid gap-1.5 sm:grid-cols-3 sm:gap-2">
         <Kpi label="Loyalty points" value={c?.loyaltyPoints ?? 0} accent="violet" />

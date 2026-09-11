@@ -14,6 +14,8 @@ export type Me = {
   tenantId: string | null;
   allBranches: boolean;
   isPlatform: boolean;
+  apiAccessEnabled?: boolean;
+  lockMessage?: string | null;
   branches: {
     id: string;
     name: string;

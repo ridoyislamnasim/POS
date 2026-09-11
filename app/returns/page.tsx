@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { moneyCell } from "@/components/erp-page";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 
 type Row = {
   id: string;
@@ -26,7 +27,7 @@ type Row = {
   refundedAmount?: string;
   refundMethod?: string;
   createdAt: string;
-  sale: { id: string; invoiceNumber: string };
+  sale: { id: string; invoiceNumber: string; customer?: { id: string; name: string; phone: string } | null };
 };
 
 export default function ReturnsPage() {
@@ -112,6 +113,20 @@ export default function ReturnsPage() {
                   <TableCell className={tableCellNumeric}>{r.refundMethod ?? ""} {moneyCell(r.refundAmount)}</TableCell>
                   <TableCell className="space-x-2">
                     <DocumentActions type="return" id={r.id} number={r.number} />
+                    {r.sale?.customer ? (
+                      <SendSmsButton
+                        target={{
+                          recipientType: "CUSTOMER",
+                          recipientId: r.sale.customer.id,
+                          phone: r.sale.customer.phone,
+                          name: r.sale.customer.name,
+                          referenceType: "SaleReturn",
+                          referenceId: r.id,
+                          templateKey: r.kind === "EXCHANGE" ? "EXCHANGE_NOTIFICATION" : "RETURN_CONFIRMATION",
+                          vars: { invoiceNo: r.sale.invoiceNumber, orderNo: r.number, refundAmount: r.refundAmount },
+                        }}
+                      />
+                    ) : null}
                     {r.status === "PENDING" && canDecide ? (
                       <>
                         <Button size="sm" onClick={() => setPending({ id: r.id, number: r.number, action: "approve" })}>Approve</Button>

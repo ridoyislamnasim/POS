@@ -140,6 +140,7 @@ type Props = {
   collapsed: boolean;
   isDesktop: boolean;
   can: (p: string) => boolean;
+  isPlatform?: boolean;
   loading?: boolean;
   onCloseMobile: () => void;
   onToggleCollapse: () => void;
@@ -166,10 +167,10 @@ function readOpen(): string[] | null {
   }
 }
 
-export function AppSidebar({ open, collapsed, isDesktop, can, loading, onCloseMobile, onToggleCollapse }: Props) {
+export function AppSidebar({ open, collapsed, isDesktop, can, isPlatform, loading, onCloseMobile, onToggleCollapse }: Props) {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
-  const groups = useMemo(() => filterNavGroups(can), [can]);
+  const groups = useMemo(() => filterNavGroups(can, { isPlatform }), [can, isPlatform]);
   const motionT = reduceMotion ? { duration: 0 } : sidebarTransition;
   const sidebarWidth = isDesktop
     ? collapsed

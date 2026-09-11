@@ -47,7 +47,9 @@ export const HELP_TOURS: HelpTour[] = [
     steps: [
       { selector: "[data-help='page-header']", href: "/users", title: "Users across tenants", body: "Platform can invite anyone, including tenant owners. The Business column shows which shop they belong to." },
       { selector: "[data-help='page-header']", href: "/roles", title: "Roles", body: "Only platform assigns Platform super admin. Do not use this login for daily counter work." },
-      { selector: "[data-help='page-header']", href: "/subscription", title: "Plans", body: "Tenant billing and limits live here when you need them — not on the register." },
+      { selector: "[data-help='page-header']", href: "/platform/tenants", title: "Tenants", body: "Each shop is a tenant. Turn API access off when last month’s bill is unpaid." },
+      { selector: "[data-help='page-header']", href: "/platform/invoices", title: "Invoices", body: "Create a bill, send it, mark paid after you verify payment, then send a receipt." },
+      { selector: "[data-help='page-header']", href: "/subscription", title: "Plans", body: "Tenant-facing plan limits. Platform invoices also show on this page for the shop owner." },
     ],
   },
 ];

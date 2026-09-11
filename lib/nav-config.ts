@@ -34,6 +34,7 @@ import {
   Bell,
   Globe,
   Bike,
+  MessageSquare,
   ClipboardCheck,
   PieChart,
   RotateCcw,
@@ -53,6 +54,7 @@ export type NavItem = {
   href: string;
   icon: LucideIcon;
   permission: string | null;
+  platformOnly?: boolean;
 };
 
 export type NavGroup = {
@@ -63,6 +65,15 @@ export type NavGroup = {
 };
 
 export const NAV_GROUPS: NavGroup[] = [
+  {
+    title: "Platform",
+    icon: Building2,
+    tone: "stone",
+    items: [
+      { title: "Tenants", href: "/platform/tenants", icon: Building2, permission: null, platformOnly: true },
+      { title: "Invoices", href: "/platform/invoices", icon: CreditCard, permission: null, platformOnly: true },
+    ],
+  },
   {
     title: "Overview",
     icon: LayoutDashboard,
@@ -174,6 +185,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "E-commerce Orders", href: "/ecommerce", icon: Globe, permission: "order.view" },
       { title: "Deliveries", href: "/deliveries", icon: Bike, permission: "delivery.manage" },
       { title: "Notifications", href: "/notifications", icon: Bell, permission: "notification.view" },
+      { title: "SMS", href: "/sms", icon: MessageSquare, permission: "sms.view" },
     ],
   },
   {
@@ -241,6 +253,9 @@ export const PAGE_TITLES: Record<string, { crumb: string; title: string }> = {
   "/ecommerce": { crumb: "Commerce / Online", title: "E-commerce Orders" },
   "/deliveries": { crumb: "Commerce / Delivery", title: "Deliveries" },
   "/notifications": { crumb: "Commerce / Notifications", title: "Notifications" },
+  "/sms": { crumb: "Commerce / SMS", title: "SMS" },
+  "/platform/tenants": { crumb: "Platform / Tenants", title: "Tenants" },
+  "/platform/invoices": { crumb: "Platform / Invoices", title: "Platform invoices" },
   "/organization": { crumb: "Org / Business", title: "Business Profile" },
   "/branches": { crumb: "Org / Branches", title: "Branches" },
   "/warehouses": { crumb: "Org / Warehouses", title: "Warehouses" },
@@ -262,9 +277,12 @@ export function pageMeta(path: string) {
   return hit ? PAGE_TITLES[hit] : { crumb: "POS", title: "POS" };
 }
 
-export function filterNavGroups(can: (p: string) => boolean): NavGroup[] {
+export function filterNavGroups(can: (p: string) => boolean, opts?: { isPlatform?: boolean }): NavGroup[] {
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((i) => !i.permission || can(i.permission)),
+    items: g.items.filter((i) => {
+      if (i.platformOnly && !opts?.isPlatform) return false;
+      return !i.permission || can(i.permission);
+    }),
   })).filter((g) => g.items.length > 0);
 }

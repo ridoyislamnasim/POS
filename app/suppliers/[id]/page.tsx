@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { usePagedRows } from "@/lib/use-pagination";
 import { moneyCell, statusBadge } from "@/components/erp-page";
 import { toastError, toastUpdated } from "@/lib/toast";
+import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 
 type Supplier = {
   id: string;
@@ -60,6 +61,20 @@ export default function SupplierDetailPage() {
         >
           Edit
         </Button>
+        {s ? (
+          <SendSmsButton
+            size="sm"
+            label="Send SMS"
+            target={{
+              recipientType: "SUPPLIER",
+              recipientId: s.id,
+              phone: s.phone,
+              name: s.name,
+              templateKey: "MANUAL_SUPPLIER",
+              vars: { dueAmount: String(s.creditDue ?? "0") },
+            }}
+          />
+        ) : null}
       </PageHeader>
       <div className="mb-3 grid gap-1.5 sm:grid-cols-2 sm:gap-2">
         <Kpi label="Supplier due" value={`৳ ${Number(s?.creditDue ?? 0).toFixed(2)}`} accent="amber" />

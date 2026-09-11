@@ -10,6 +10,7 @@ const CODE_HINTS: Record<string, string> = {
   SHIFT_ALREADY_OPEN: "Close the current shift first",
   CONFLICT: "That value is already in use",
   PLAN_LIMIT: "Plan limit reached",
+  PAYMENT_REQUIRED: "Please pay your previous month's bill to continue using the platform.",
 };
 
 function clean(value: unknown): string | null {

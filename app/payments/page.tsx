@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ResourcePage, moneyCell, moneyText, statusBadge, sumField } from "@/components/erp-page";
 import { api } from "@/lib/api";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 
 export default function PaymentsPage() {
   const customers = useQuery({ queryKey: ["customers-lookup"], queryFn: () => api<{ id: string; name: string }[]>("/api/v1/customers?limit=100") });
@@ -52,7 +53,26 @@ export default function PaymentsPage() {
         {
           key: "docs",
           label: "",
-          render: (r) => <DocumentActions type="payment" id={(r as { id: string }).id} number={(r as { reference?: string }).reference} />,
+          render: (r) => {
+            const row = r as { id: string; reference?: string; partyType: string; partyId: string; amount: string; direction: string };
+            return (
+              <div className="flex flex-wrap justify-end gap-1">
+                <DocumentActions type="payment" id={row.id} number={row.reference} />
+                {(row.partyType === "CUSTOMER" || row.partyType === "SUPPLIER") ? (
+                  <SendSmsButton
+                    target={{
+                      recipientType: row.partyType,
+                      recipientId: row.partyId,
+                      referenceType: "LedgerPayment",
+                      referenceId: row.id,
+                      templateKey: row.partyType === "SUPPLIER" ? "SUPPLIER_PAYMENT" : "PAYMENT_CONFIRMATION",
+                      vars: { amount: row.amount },
+                    }}
+                  />
+                ) : null}
+              </div>
+            );
+          },
         },
       ]}
     />

@@ -14,6 +14,7 @@ import { Button, Field, PageHeader, SummaryCards, Table, TableBody, TableCell, T
 import { toastCreated, toastError } from "@/lib/toast";
 import { moneyCell, moneyText, statusBadge, sumField } from "@/components/erp-page";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 import { useHelpCreateAction } from "@/lib/help";
 
 type Purchase = {
@@ -23,12 +24,12 @@ type Purchase = {
   paid: string;
   due: string;
   status: string;
-  supplier: { name: string };
+  supplier: { id: string; name: string; phone?: string };
   branch: { name: string };
   items: { id: string; variantId: string; qty: string; unitCost: string }[];
 };
 
-type PurchaseReturn = { id: string; number: string; reason: string; total: string; purchase?: { invoiceNumber: string } };
+type PurchaseReturn = { id: string; number: string; reason: string; total: string; purchase?: { invoiceNumber: string; supplier?: { id: string; name: string; phone?: string } } };
 
 export default function PurchasesPage() {
   const { me } = useMe();
@@ -140,6 +141,18 @@ export default function PurchasesPage() {
                 <TableCell>
                   <div className="flex flex-wrap items-center justify-end gap-1">
                     <DocumentActions type="purchase" id={p.id} number={p.invoiceNumber} />
+                    <SendSmsButton
+                      target={{
+                        recipientType: "SUPPLIER",
+                        recipientId: p.supplier?.id,
+                        phone: p.supplier?.phone,
+                        name: p.supplier?.name,
+                        referenceType: "Purchase",
+                        referenceId: p.id,
+                        templateKey: "PURCHASE_RECEIVED",
+                        vars: { invoiceNo: p.invoiceNumber, amount: p.total, dueAmount: p.due, paidAmount: p.paid },
+                      }}
+                    />
                     <Button
                       type="button"
                       variant="outline"
@@ -185,7 +198,25 @@ export default function PurchasesPage() {
                   <TableCell>{r.purchase?.invoiceNumber ?? "—"}</TableCell>
                   <TableCell>{r.reason}</TableCell>
                   <TableCell className={tableCellNumeric}>{moneyCell(r.total)}</TableCell>
-                  <TableCell><DocumentActions type="purchase-return" id={r.id} number={r.number} /></TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <DocumentActions type="purchase-return" id={r.id} number={r.number} />
+                      {r.purchase?.supplier ? (
+                        <SendSmsButton
+                          target={{
+                            recipientType: "SUPPLIER",
+                            recipientId: r.purchase.supplier.id,
+                            phone: r.purchase.supplier.phone,
+                            name: r.purchase.supplier.name,
+                            referenceType: "PurchaseReturn",
+                            referenceId: r.id,
+                            templateKey: "PURCHASE_RETURN",
+                            vars: { invoiceNo: r.purchase.invoiceNumber, orderNo: r.number, refundAmount: r.total },
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

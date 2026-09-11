@@ -28,6 +28,7 @@ import { moneyCell } from "@/components/erp-page";
 import { DocumentActions } from "@/components/documents/document-actions";
 import { DocumentLivePreview } from "@/components/documents/document-preview";
 import { newIdempotencyKey, RETURN_CONDITIONS } from "@/lib/stock-workflow";
+import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 
 type Item = {
   id: string;
@@ -45,6 +46,7 @@ type Sale = {
   paid: string;
   due: string;
   currency: string;
+  customer?: { id: string; name: string; phone: string } | null;
   branch: { name: string };
   items: Item[];
   payments: { id: string; method: string; amount: string; status: string }[];
@@ -154,6 +156,22 @@ export default function SaleDetailPage() {
           Back
         </Button>
         <DocumentActions type="sale" id={sale.id} number={sale.invoiceNumber} preview size="sm" compact={false} />
+        {sale.customer ? (
+          <SendSmsButton
+            size="sm"
+            label="SMS"
+            target={{
+              recipientType: "CUSTOMER",
+              recipientId: sale.customer.id,
+              phone: sale.customer.phone,
+              name: sale.customer.name,
+              referenceType: "Sale",
+              referenceId: sale.id,
+              templateKey: "SALE_CONFIRMATION",
+              vars: { invoiceNo: sale.invoiceNumber, amount: sale.total, dueAmount: sale.due, paidAmount: sale.paid },
+            }}
+          />
+        ) : null}
         {can("sale.void") && sale.status === "COMPLETED" ? (
           <Button variant="destructive" onClick={() => setVoidOpen(true)}>
             Void
