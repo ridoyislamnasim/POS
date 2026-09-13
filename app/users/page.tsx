@@ -39,6 +39,8 @@ type User = {
   tenants?: { isPlatform?: boolean; tenant: { id: string; name: string } }[];
 };
 
+type TenantOpt = { id: string; name: string };
+
 function tenantLabel(u: User) {
   const names = (u.tenants ?? [])
     .filter((t) => !t.isPlatform)
@@ -61,27 +63,41 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("Temp123!");
   const [roleKey, setRoleKey] = useState("CASHIER");
+  const [tenantId, setTenantId] = useState("");
 
   useEffect(() => {
     if (meError) router.replace("/login");
   }, [meError, router]);
 
-  const list = useServerList<User>("users", "/api/v1/users", { enabled: meReady });
+  const list = useServerList<User>("users", "/api/v1/users", { enabled: meReady, defaultSort: "createdAt" });
   const roles = useQuery({
     queryKey: ["roles"],
     queryFn: () => api<{ key: string; name: string }[]>("/api/v1/users/roles"),
     enabled: meReady,
   });
+  const tenants = useQuery({
+    queryKey: ["platform-tenant-options"],
+    queryFn: () => api<TenantOpt[]>("/api/v1/platform-billing/tenants?limit=100"),
+    enabled: isPlatform,
+  });
   const invite = useMutation({
     mutationFn: () =>
       api("/api/v1/users", {
         method: "POST",
-        body: JSON.stringify({ name, email, password, roleKey }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          roleKey,
+          ...(isPlatform && roleKey === "TENANT_OWNER" ? { tenantId } : {}),
+        }),
       }),
     onSuccess: () => {
       toastCreated("user", email);
       setName("");
       setEmail("");
+      setRoleKey("CASHIER");
+      setTenantId("");
       setCreateOpen(false);
       list.refetch();
     },
@@ -91,7 +107,13 @@ export default function UsersPage() {
     mutationFn: () =>
       api(`/api/v1/users/${editing!.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, email, roleKey, ...(password ? { password } : {}) }),
+        body: JSON.stringify({
+          name,
+          email,
+          roleKey,
+          ...(password ? { password } : {}),
+          ...(isPlatform && roleKey === "TENANT_OWNER" ? { tenantId } : {}),
+        }),
       }),
     onSuccess: () => {
       toastUpdated("user");
@@ -124,6 +146,9 @@ export default function UsersPage() {
     else invite.mutate();
   }
 
+  const tenantRows = (tenants.data ?? []).filter((t) => t.id);
+  const roleLocked = !isPlatform && editing?.roles.some((r) => r.role.key === "TENANT_OWNER");
+
   return (
     <AppShell>
       <PageHeader
@@ -139,6 +164,8 @@ export default function UsersPage() {
           setName("");
           setEmail("");
           setPassword("Temp123!");
+          setRoleKey("CASHIER");
+          setTenantId("");
           setCreateOpen(true);
         }}>
           <Plus className="mr-2 h-4 w-4" />
@@ -173,7 +200,7 @@ export default function UsersPage() {
                 <TableCell>{u.name}</TableCell>
                 <TableCell>{u.email}</TableCell>
                 {isPlatform ? <TableCell>{tenantLabel(u)}</TableCell> : null}
-                <TableCell>{u.roles.map((r) => r.role.name).join(", ")}</TableCell>
+                <TableCell>{u.roles[0]?.role.name ?? "—"}</TableCell>
                 <TableCell>
                   <StatusBadge value={u.status} />
                 </TableCell>
@@ -187,6 +214,7 @@ export default function UsersPage() {
                       setEmail(u.email);
                       setPassword("");
                       setRoleKey(u.roles[0]?.role.key ?? "CASHIER");
+                      setTenantId(u.tenants?.find((t) => !t.isPlatform)?.tenant.id ?? "");
                       setCreateOpen(false);
                     }}
                   >
@@ -245,8 +273,17 @@ export default function UsersPage() {
           <Field label={editing ? "New password" : "Temporary password *"}>
             <PasswordInput placeholder={editing ? "Leave blank to keep" : "Temp password"} value={password} onChange={setPassword} autoComplete="new-password" />
           </Field>
-          <Field label="Role">
-            <select className={inputClass} value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
+          <Field label="Role" hint={roleLocked ? "The tenant owner role cannot be changed." : undefined}>
+            <select
+              className={inputClass}
+              value={roleKey}
+              disabled={roleLocked}
+              onChange={(e) => {
+                const v = e.target.value;
+                setRoleKey(v);
+                if (v === "TENANT_OWNER" && !tenantId) setTenantId(tenantRows[0]?.id ?? "");
+              }}
+            >
               {(roles.data ?? []).map((r) => (
                 <option key={r.key} value={r.key}>
                   {r.name}
@@ -254,6 +291,21 @@ export default function UsersPage() {
               ))}
             </select>
           </Field>
+          {isPlatform && roleKey === "TENANT_OWNER" ? (
+            <Field
+              label="Tenant *"
+              hint={editing ? "Choose which shop this person owns. Moving to another shop reassigns them there." : "Only the platform super admin can create tenant owners."}
+            >
+              <select className={inputClass} required value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+                <option value="">Select tenant</option>
+                {tenantRows.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
         </form>
       </Dialog>
 

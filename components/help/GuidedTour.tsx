@@ -88,7 +88,7 @@ export function GuidedTour({
       ) : null}
       <div
         className="absolute w-[min(280px,calc(100vw-24px))] rounded-lg border border-orange-200 bg-card p-3 text-sm shadow-xl dark:border-orange-900"
-        style={{ top: pos.top, left: pos.left }}
+        style={{ top: pos.top - 30, left: pos.left  }}
       >
         <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {tour.title} · {stepIndex + 1}/{tour.steps.length}

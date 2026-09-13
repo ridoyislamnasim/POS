@@ -393,7 +393,7 @@ export default function PosPage() {
                 onClose={() => setMatrixProduct(null)}
               />
             ) : (
-              <div className="grid grid-cols-2 gap-2 overflow-auto p-2 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2 overflow-auto p-2 sm:grid-cols-3 md:grid-cols-4">
                 {!catalog.length ? (
                   <div className="col-span-full">
                     <EmptyState title="No products" hint={emptyHintFor("/pos")} />
