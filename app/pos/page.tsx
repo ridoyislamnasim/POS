@@ -4,7 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fileUrl } from "@/lib/api";
-import { usePOSStore } from "@/lib/pos-store";
+import { usePOSStore, type DiscountType } from "@/lib/pos-store";
 import { dict } from "@/lib/i18n";
 import { AppShell } from "@/components/app-shell";
 import { useMe } from "@/lib/auth";
@@ -12,8 +12,8 @@ import { Modal, btnGhost, btnPrimary, inputClass, EmptyState } from "@/component
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PosCustomerPicker } from "@/components/pos/pos-customer-picker";
 import { DocumentActions } from "@/components/documents/document-actions";
-import { getApiErrorMessage, toastPos, toastWarn } from "@/lib/toast";
-import { lineCharge, roundMoney } from "@/lib/money";
+import { getApiErrorMessage, toastPos } from "@/lib/toast";
+import { itemDiscountAmount, lineCharge, roundMoney, transactionDiscountAmount } from "@/lib/money";
 import { useDebounced } from "@/lib/use-debounce";
 import { emptyHintFor } from "@/lib/help";
 import { PageHelpButton } from "@/components/help/PageHelpButton";
@@ -37,7 +37,19 @@ type Product = {
   }[];
 };
 
-type Held = { id: string; payload: { cart?: ReturnType<typeof usePOSStore.getState>["cart"]; customer?: { id: string; name: string; phone: string } | null } };
+type Held = {
+  id: string;
+  payload: {
+    cart?: ReturnType<typeof usePOSStore.getState>["cart"];
+    customer?: { id: string; name: string; phone: string } | null;
+    txDiscountType?: DiscountType;
+    txDiscountAmount?: string;
+    txDiscountPercent?: string;
+    txDiscountReason?: string | null;
+  };
+};
+
+type DiscEdit = { kind: "line"; variantId: string } | { kind: "bill" };
 
 export default function PosPage() {
   const qc = useQueryClient();
@@ -46,18 +58,20 @@ export default function PosPage() {
   const [matrixProduct, setMatrixProduct] = useState<Product | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [customerFocus, setCustomerFocus] = useState(0);
-  const [discountOpen, setDiscountOpen] = useState(false);
+  const [discEdit, setDiscEdit] = useState<DiscEdit | null>(null);
+  const [discType, setDiscType] = useState<DiscountType>("percent");
+  const [discValue, setDiscValue] = useState("0");
+  const [discReason, setDiscReason] = useState("");
   const [holdsOpen, setHoldsOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closingCash, setClosingCash] = useState("");
   const [cash, setCash] = useState("");
   const [card, setCard] = useState("");
   const [mfs, setMfs] = useState("");
-  const [discVariant, setDiscVariant] = useState<string | null>(null);
-  const [discAmt, setDiscAmt] = useState("0");
   const store = usePOSStore();
   const t = dict[store.locale];
   const { me, can } = useMe();
+  const canDiscount = can("discount.apply");
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -170,12 +184,27 @@ export default function PosPage() {
           deviceId: s.deviceId,
           clientTransactionId: attempt,
           ...(store.customer?.id ? { customerId: store.customer.id } : {}),
-          items: store.cart.map((c) => ({
-            variantId: c.variantId,
-            qty: c.qty,
-            discountAmount: c.discountAmount && Number(c.discountAmount) > 0 ? c.discountAmount : undefined,
-            discountReason: c.discountReason,
-          })),
+          items: store.cart.map((c) => {
+            const dType = c.discountType ?? "flat";
+            const flat = Number(c.discountAmount || 0);
+            const pct = Number(c.discountPercent || 0);
+            return {
+              variantId: c.variantId,
+              qty: c.qty,
+              ...(dType === "flat" && flat > 0 ? { discountAmount: c.discountAmount } : {}),
+              ...(dType === "percent" && pct > 0 ? { discountPercent: c.discountPercent } : {}),
+              discountReason: c.discountReason,
+            };
+          }),
+          ...(store.txDiscountType === "flat" &&
+          Number(store.txDiscountAmount || 0) > 0
+            ? { transactionDiscount: store.txDiscountAmount }
+            : {}),
+          ...(store.txDiscountType === "percent" &&
+          Number(store.txDiscountPercent || 0) > 0
+            ? { transactionDiscountPercent: store.txDiscountPercent }
+            : {}),
+          ...(store.txDiscountReason ? { transactionDiscountReason: store.txDiscountReason } : {}),
           payments,
         }),
       });
@@ -200,7 +229,14 @@ export default function PosPage() {
         method: "POST",
         body: JSON.stringify({
           branchId: station().branchId,
-          payload: { cart: store.cart, customer: store.customer },
+          payload: {
+            cart: store.cart,
+            customer: store.customer,
+            txDiscountType: store.txDiscountType,
+            txDiscountAmount: store.txDiscountAmount,
+            txDiscountPercent: store.txDiscountPercent,
+            txDiscountReason: store.txDiscountReason,
+          },
         }),
       }),
     onSuccess: () => {
@@ -211,23 +247,27 @@ export default function PosPage() {
     onError: (e) => toastPos("error", getApiErrorMessage(e, "Hold failed")),
   });
 
-  const cartParts = useMemo(() => {
-    return store.cart.reduce(
-      (acc, l) => {
-        const line = lineCharge({
-          unitPrice: Number(l.unitPrice),
-          qty: l.qty,
-          discount: Number(l.discountAmount || 0),
-          taxRatePercent: Number(l.taxRate || 0),
-        });
-        acc.subtotal = roundMoney(acc.subtotal + line.taxable);
-        acc.tax = roundMoney(acc.tax + line.tax);
-        acc.total = roundMoney(acc.total + line.lineTotal);
-        return acc;
-      },
-      { subtotal: 0, tax: 0, total: 0 },
-    );
-  }, [store.cart]);
+const cartParts = useMemo(() => {
+  const lines = store.cart.map((l) =>
+    lineCharge({
+      unitPrice: Number(l.unitPrice),
+      qty: l.qty,
+      discount: (l.discountType ?? "flat") === "flat" ? Number(l.discountAmount || 0) : 0,
+      discountPercent: (l.discountType ?? "flat") === "percent" ? Number(l.discountPercent || 0) : 0,
+      taxRatePercent: Number(l.taxRate || 0),
+    }),
+  );
+  const subtotal = roundMoney(lines.reduce((s, c) => s + c.taxable, 0));
+  const tax = roundMoney(lines.reduce((s, c) => s + c.tax, 0));
+  const lineDiscount = roundMoney(lines.reduce((s, c) => s + c.discount, 0));
+  const billDiscount = transactionDiscountAmount({
+    subtotal,
+    flat: store.txDiscountType === "flat" ? Number(store.txDiscountAmount || 0) : 0,
+    percent: store.txDiscountType === "percent" ? Number(store.txDiscountPercent || 0) : 0,
+  });
+  const total = roundMoney(subtotal + tax - billDiscount);
+  return { lines, subtotal, tax, lineDiscount, billDiscount, total };
+}, [store.cart, store.txDiscountType, store.txDiscountAmount, store.txDiscountPercent]);
   const cartTotal = cartParts.total;
   const catalog = products.data ?? [];
   const paidNow = Number(cash || 0) + Number(card || 0) + Number(mfs || 0);
@@ -252,12 +292,7 @@ export default function PosPage() {
       }
       if (e.key === "F8") {
         e.preventDefault();
-        if (!can("discount.apply")) {
-          toastWarn("Discount permission required");
-          return;
-        }
-        setDiscVariant(store.cart[0]?.variantId ?? null);
-        setDiscountOpen(true);
+        openBillDiscount();
       }
       if (e.key === "F9") {
         e.preventDefault();
@@ -269,9 +304,9 @@ export default function PosPage() {
         if (store.cart.length) setPayOpen(true);
       }
       if (e.key === "Escape") {
-        if (payOpen || discountOpen || holdsOpen || closeOpen) {
+        if (payOpen || discEdit || holdsOpen || closeOpen) {
           setPayOpen(false);
-          setDiscountOpen(false);
+          setDiscEdit(null);
           setHoldsOpen(false);
           setCloseOpen(false);
           return;
@@ -290,7 +325,7 @@ export default function PosPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, hold, pay, can, payOpen, discountOpen, holdsOpen, closeOpen]);
+  }, [store, hold, pay, canDiscount, payOpen, discEdit, holdsOpen, closeOpen]);
 
   async function onScan(e: React.FormEvent) {
     e.preventDefault();
@@ -334,11 +369,66 @@ export default function PosPage() {
       sku: v.sku,
       unitPrice: String(v.price),
       qty: 1,
+      discountType: "flat",
       discountAmount: "0",
+      discountPercent: "0",
       taxRate: String(product.taxCategory?.rate ?? 0),
     });
     setMatrixProduct(null);
     scanRef.current?.focus();
+  }
+
+  function openLineDiscount(variantId: string) {
+    const line = store.cart.find((c) => c.variantId === variantId);
+    if (!line) return;
+    const type = line.discountType ?? "flat";
+    setDiscType(type);
+    setDiscValue(type === "percent" ? line.discountPercent ?? "0" : line.discountAmount ?? "0");
+    setDiscReason("");
+    setDiscEdit({ kind: "line", variantId });
+  }
+
+  function openBillDiscount() {
+    setDiscType(store.txDiscountType);
+    setDiscValue(store.txDiscountType === "percent" ? store.txDiscountPercent : store.txDiscountAmount);
+    setDiscReason(store.txDiscountReason ?? "");
+    setDiscEdit({ kind: "bill" });
+  }
+
+  function currentDiscAmount(kind: "line" | "bill", variantId?: string): number {
+    if (kind === "bill") return cartParts.billDiscount;
+    const line = store.cart.find((c) => c.variantId === variantId);
+    if (!line) return 0;
+    const type = line.discountType ?? "flat";
+    return itemDiscountAmount({
+      unitPrice: Number(line.unitPrice),
+      qty: line.qty,
+      flat: type === "flat" ? Number(line.discountAmount || 0) : 0,
+      percent: type === "percent" ? Number(line.discountPercent || 0) : 0,
+    });
+  }
+
+  function applyDiscount() {
+    if (!discEdit) return;
+    const value = String(Number(discValue) || 0);
+    if (discEdit.kind === "line") {
+      store.setDiscount(discEdit.variantId, discType, value, "POS");
+    } else {
+      store.setTxDiscount(discType, value, discReason.trim() || undefined);
+    }
+    setDiscEdit(null);
+    toastPos("success", "Discount applied");
+  }
+
+  function clearDiscount() {
+    if (!discEdit) return;
+    if (discEdit.kind === "line") {
+      store.setDiscount(discEdit.variantId, "flat", "0", "POS");
+    } else {
+      store.clearTxDiscount();
+    }
+    setDiscEdit(null);
+    toastPos("success", "Discount cleared");
   }
 
   if (!can("sale.create") && me) {
@@ -430,32 +520,91 @@ export default function PosPage() {
               <div data-help="pos-customer">
                 <PosCustomerPicker openSignal={customerFocus} />
               </div>
-              {store.cart.map((l) => (
-                <div key={l.variantId} className="mb-2 rounded-lg border bg-card p-2 shadow-sm">
-                  <div className="flex justify-between text-sm font-medium">
-                    <span>{l.name}</span>
-                    <button type="button" className="text-muted-foreground" onClick={() => store.remove(l.variantId)}>
-                      ×
-                    </button>
+              {store.cart.map((l) => {
+                const dType = l.discountType ?? "flat";
+                const flat = dType === "flat" ? Number(l.discountAmount || 0) : 0;
+                const pct = dType === "percent" ? Number(l.discountPercent || 0) : 0;
+                const calc = lineCharge({
+                  unitPrice: Number(l.unitPrice),
+                  qty: l.qty,
+                  discount: flat,
+                  discountPercent: pct,
+                  taxRatePercent: Number(l.taxRate || 0),
+                });
+                const hasDisc = calc.discount > 0;
+                const chipLabel =
+                  dType === "percent" && pct > 0 ? `−${pct}%` : `−৳${Number(l.discountAmount || 0).toFixed(2)}`;
+                const chipCls =
+                  "rounded-full border px-2 py-0.5 text-[11px] tabular-nums " +
+                  (hasDisc
+                    ? "border-amber-500/60 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                    : "border-slate-300 text-muted-foreground");
+                return (
+                  <div key={l.variantId} className="mb-2 rounded-lg border bg-card p-2 shadow-sm">
+                    <div className="flex justify-between text-sm font-medium">
+                      <span>{l.name}</span>
+                      <button type="button" className="text-muted-foreground" onClick={() => store.remove(l.variantId)}>
+                        ×
+                      </button>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{l.variantLabel}</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <button type="button" className="h-10 w-10 rounded-md border" onClick={() => store.setQty(l.variantId, l.qty - 1)}>
+                        −
+                      </button>
+                      <span className="w-8 text-center tabular-nums">{l.qty}</span>
+                      <button type="button" className="h-10 w-10 rounded-md border" onClick={() => store.setQty(l.variantId, l.qty + 1)}>
+                        +
+                      </button>
+                      <span className="ml-1 text-sm tabular-nums">
+                        {hasDisc ? (
+                          <>
+                            <span className="mr-1 line-through text-muted-foreground">৳{calc.extended.toFixed(2)}</span>
+                            <span className="font-medium">৳{(calc.extended - calc.discount).toFixed(2)}</span>
+                          </>
+                        ) : (
+                          <span className="font-medium">৳{calc.extended.toFixed(2)}</span>
+                        )}
+                      </span>
+                      {canDiscount ? (
+                        <button
+                          type="button"
+                          data-help="pos-item-discount"
+                          className={`${chipCls} ml-auto cursor-pointer`}
+                          onClick={() => openLineDiscount(l.variantId)}
+                        >
+                          {chipLabel}
+                        </button>
+                      ) : hasDisc ? (
+                        <span className={`${chipCls} ml-auto`}>{chipLabel}</span>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">{l.variantLabel}</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <button type="button" className="h-10 w-10 rounded-md border" onClick={() => store.setQty(l.variantId, l.qty - 1)}>
-                      −
-                    </button>
-                    <span className="w-8 text-center tabular-nums">{l.qty}</span>
-                    <button type="button" className="h-10 w-10 rounded-md border" onClick={() => store.setQty(l.variantId, l.qty + 1)}>
-                      +
-                    </button>
-                    <span className="ml-auto text-sm tabular-nums">{(Number(l.unitPrice) * l.qty - Number(l.discountAmount || 0)).toFixed(2)}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="border-t border-orange-100 bg-gradient-to-t from-orange-50/60 to-card p-3 shadow-sm dark:border-orange-950/40 dark:from-orange-950/25">
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Subtotal</span>
                 <span className="tabular-nums">৳ {cartParts.subtotal.toFixed(2)}</span>
+              </div>
+              {cartParts.lineDiscount > 0 ? (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Item discount</span>
+                  <span className="tabular-nums">−৳ {cartParts.lineDiscount.toFixed(2)}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between text-xs">
+                {canDiscount ? (
+                  <button type="button" data-help="pos-bill-discount" className="cursor-pointer text-muted-foreground hover:text-primary" onClick={openBillDiscount}>
+                    {t.discount} (F8)
+                  </button>
+                ) : (
+                  <span className="text-muted-foreground">{t.discount} (F8)</span>
+                )}
+                <span className={`tabular-nums ${cartParts.billDiscount > 0 ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
+                  −৳ {cartParts.billDiscount.toFixed(2)}
+                </span>
               </div>
               {cartParts.tax > 0 ? (
                 <div className="flex justify-between text-xs text-muted-foreground">
@@ -521,27 +670,37 @@ export default function PosPage() {
         </Modal>
       ) : null}
 
-      {discountOpen ? (
-        <Modal title="Discount (F8)" onClose={() => setDiscountOpen(false)}>
-          <select className={inputClass} value={discVariant ?? ""} onChange={(e) => setDiscVariant(e.target.value)}>
-            {store.cart.map((l) => (
-              <option key={l.variantId} value={l.variantId}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-          <input className={inputClass + " mt-2"} value={discAmt} onChange={(e) => setDiscAmt(e.target.value)} />
-          <button
-            type="button"
-            className={btnPrimary + " mt-3 w-full"}
-            onClick={() => {
-              if (!discVariant) return;
-              store.setDiscount(discVariant, discAmt, "POS");
-              setDiscountOpen(false);
-              toastPos("success", "Discount applied");
-            }}
-          >
-            Apply
+      {discEdit ? (
+        <Modal
+          title={discEdit.kind === "line" ? "Item discount" : "Bill discount"}
+          onClose={() => setDiscEdit(null)}
+        >
+          <DiscountEditor
+            canDiscount={canDiscount}
+            type={discType}
+            setType={setDiscType}
+            value={discValue}
+            setValue={setDiscValue}
+            reason={discReason}
+            setReason={setDiscReason}
+            withReason={discEdit.kind === "bill"}
+            currentAmount={currentDiscAmount(
+              discEdit.kind,
+              discEdit.kind === "line" ? discEdit.variantId : undefined,
+            )}
+          />
+          {canDiscount ? (
+            <div className="mt-3 flex gap-2">
+              <button type="button" className={btnGhost + " flex-1"} onClick={clearDiscount}>
+                Clear
+              </button>
+              <button type="button" className={btnPrimary + " flex-1"} onClick={applyDiscount}>
+                Apply
+              </button>
+            </div>
+          ) : null}
+          <button type="button" className={btnGhost + " mt-2 w-full"} onClick={() => setDiscEdit(null)}>
+            Cancel
           </button>
         </Modal>
       ) : null}
@@ -559,6 +718,13 @@ export default function PosPage() {
                 store.clear();
                 for (const line of payload.cart ?? []) store.addLine(line);
                 if (payload.customer) store.setCustomer(payload.customer);
+                if (payload.txDiscountAmount && payload.txDiscountPercent) {
+                  store.setTxDiscount(
+                    payload.txDiscountType ?? "flat",
+                    payload.txDiscountType === "percent" ? payload.txDiscountPercent : payload.txDiscountAmount,
+                    payload.txDiscountReason ?? undefined,
+                  );
+                }
                 await api(`/api/v1/sales/holds/${h.id}`, { method: "DELETE" }).catch((e) =>
                   toastPos("error", getApiErrorMessage(e, "Could not release hold")),
                 );
@@ -585,6 +751,78 @@ export default function PosPage() {
         <input className={inputClass + " mt-1"} type="number" placeholder="Optional" value={closingCash} onChange={(e) => setClosingCash(e.target.value)} />
       </ConfirmDialog>
     </AppShell>
+  );
+}
+
+const QUICK_PERCENTS = [5, 10, 15, 20, 25];
+
+function DiscountEditor({
+  canDiscount,
+  type,
+  setType,
+  value,
+  setValue,
+  reason,
+  setReason,
+  withReason,
+  currentAmount,
+}: {
+  canDiscount: boolean;
+  type: DiscountType;
+  setType: (t: DiscountType) => void;
+  value: string;
+  setValue: (v: string) => void;
+  reason: string;
+  setReason: (v: string) => void;
+  withReason: boolean;
+  currentAmount: number;
+}) {
+  if (!canDiscount) {
+    return (
+      <div className="text-sm text-muted-foreground">
+        Current discount: ৳ {currentAmount.toFixed(2)} — you need discount permission to change it.
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="flex gap-1">
+        <button type="button" className={type === "flat" ? btnPrimary : btnGhost} onClick={() => setType("flat")}>
+          ৳
+        </button>
+        <button type="button" className={type === "percent" ? btnPrimary : btnGhost} onClick={() => setType("percent")}>
+          %
+        </button>
+      </div>
+      <input
+        type="number"
+        min="0"
+        inputMode="decimal"
+        className={inputClass + " mt-2"}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      {type === "percent" ? (
+        <div className="mt-2 grid grid-cols-5 gap-1">
+          {QUICK_PERCENTS.map((p) => (
+            <button key={p} type="button" className={btnGhost} onClick={() => setValue(String(p))}>
+              {p}%
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {withReason ? (
+        <>
+          <label className="mt-2 block text-sm">{dict.en.reason}</label>
+          <input
+            className={inputClass + " mt-1"}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Optional"
+          />
+        </>
+      ) : null}
+    </div>
   );
 }
 
