@@ -4,6 +4,7 @@ import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useDebounced } from "@/lib/use-debounce";
+import { moneyLabel } from "@/lib/money";
 import { type PosCustomer, usePOSStore } from "@/lib/pos-store";
 import { Modal, btnGhost, btnPrimary, inputClass } from "@/components/ui";
 import { getApiErrorMessage, toastPos, toastWarn } from "@/lib/toast";
@@ -48,6 +49,7 @@ export function PosCustomerPicker({
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const debounced = useDebounced(q, 220);
 
   const search = useQuery({
@@ -93,6 +95,18 @@ export function PosCustomerPicker({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, createOpen]);
 
+  useEffect(() => {
+    if (!detailsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setDetailsOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [detailsOpen]);
+
   function selectHit(row: CustomerHit) {
     attachCustomer(row);
     setOpen(false);
@@ -127,64 +141,63 @@ export function PosCustomerPicker({
   }
 
   const due = dueAmount(customer?.creditDue);
+  const openPicker = () => {
+    setOpen(true);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  };
 
   return (
-    <div ref={rootRef} className="relative mb-2">
+    <div ref={rootRef} className="relative">
       {customer ? (
-        <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-2 py-1.5 text-xs shadow-sm">
-          <div className="min-w-0">
-            <div className="truncate font-medium">{customer.name}</div>
-            <div className="text-muted-foreground">
-              {customer.phone}
-              <span className="ml-1 font-mono text-[10px] opacity-80">· {customer.id.slice(-8)}</span>
-            </div>
-            {due > 0 ? <div className="text-amber-700 dark:text-amber-400">Due ৳ {due.toFixed(2)}</div> : null}
-          </div>
-          <div className="flex shrink-0 gap-1">
-            <button
-              type="button"
-              className={btnGhost + " h-9 min-h-9 px-2 text-xs"}
-              onClick={() => {
-                setOpen(true);
-                window.setTimeout(() => inputRef.current?.focus(), 0);
-              }}
-            >
-              Change
-            </button>
-            <button
-              type="button"
-              className={btnGhost + " h-9 min-h-9 px-2 text-xs"}
-              onClick={() => usePOSStore.getState().setCustomer(null)}
-            >
-              Walk-in
-            </button>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setDetailsOpen(true)}
+          className="flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-card px-2 text-left text-xs transition-colors hover:border-primary/40 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Customer details for ${customer.name}`}
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium">{customer.name}</span>
+            <span className="truncate text-muted-foreground">{customer.phone}</span>
+            {due > 0 ? (
+              <span className="shrink-0 font-medium tabular-nums text-amber-700 dark:text-amber-400">
+                Due {moneyLabel(due)}
+              </span>
+            ) : null}
+          </span>
+          <span aria-hidden className="shrink-0 text-muted-foreground/60">›</span>
+        </button>
       ) : (
-        <div className="rounded-md border bg-card px-2 py-1.5 text-xs shadow-sm">
-          <div className="mb-1 text-muted-foreground">Walk-in · search customer (F4)</div>
-        </div>
+        <button
+          type="button"
+          onClick={openPicker}
+          className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-dashed bg-background px-2 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span>Walk-in</span>
+          <span className="tabular-nums">+ customer · F4</span>
+        </button>
       )}
 
-      <div className={customer && !open ? "hidden" : customer && open ? "mt-1" : "mt-1"}>
-        <input
-          ref={inputRef}
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder="Name, phone, email, or ID"
-          className={inputClass + " h-11"}
-          role="combobox"
-          aria-expanded={open}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          autoComplete="off"
-        />
-      </div>
+      {open ? (
+        <div className="mt-1">
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={onKeyDown}
+            placeholder="Name, phone, email, or ID"
+            className={inputClass + " h-11"}
+            role="combobox"
+            aria-expanded={open}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            autoComplete="off"
+          />
+        </div>
+      ) : null}
 
       {open ? (
         <div
@@ -254,6 +267,53 @@ export function PosCustomerPicker({
             toastPos("success", row.alreadyExists ? `Already on file · ${row.name}` : `${row.name} added`);
           }}
         />
+      ) : null}
+
+      {detailsOpen && customer ? (
+        <Modal title="Customer details" size="sm" onClose={() => setDetailsOpen(false)}>
+          <div className="rounded-md border bg-card px-3 py-2">
+            <div className="text-base font-semibold">{customer.name}</div>
+            <div className="text-sm text-muted-foreground">{customer.phone}</div>
+            {customer.email ? <div className="text-sm text-muted-foreground">{customer.email}</div> : null}
+          </div>
+          <dl className="mt-2 space-y-1 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <dt className="text-muted-foreground">Customer ID</dt>
+              <dd className="font-mono">{customer.id}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <dt className="text-muted-foreground">Credit due</dt>
+              <dd className={`tabular-nums ${due > 0 ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`}>
+                {moneyLabel(due)}
+              </dd>
+            </div>
+          </dl>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              className={btnGhost + " flex-1"}
+              onClick={() => {
+                usePOSStore.getState().setCustomer(null);
+                setDetailsOpen(false);
+              }}
+            >
+              Walk-in
+            </button>
+            <button
+              type="button"
+              className={btnGhost + " flex-1"}
+              onClick={() => {
+                setDetailsOpen(false);
+                openPicker();
+              }}
+            >
+              Change
+            </button>
+            <button type="button" className={btnPrimary + " flex-1"} onClick={() => setDetailsOpen(false)}>
+              OK
+            </button>
+          </div>
+        </Modal>
       ) : null}
     </div>
   );

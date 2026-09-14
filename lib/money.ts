@@ -44,6 +44,17 @@ export function transactionDiscountAmount(input: {
   return roundMoney(Math.min(Math.max(raw, 0), subtotal));
 }
 
+/** Compact BDT label for display only (`৳1,800`, `৳99.90`). Drops trailing zeros, lakh grouping. */
+export function moneyLabel(value: number): string {
+  const n = roundMoney(Number(value));
+  if (!Number.isFinite(n)) return "৳0";
+  const text =
+    n % 1 === 0
+      ? n.toLocaleString("en-IN")
+      : n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `৳${text}`;
+}
+
 export function lineCharge(input: {
   unitPrice: number;
   qty: number;

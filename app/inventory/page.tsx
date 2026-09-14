@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/api";
 import { useServerList } from "@/lib/use-list-state";
 import { useMe } from "@/lib/auth";
@@ -30,6 +31,7 @@ import {
   tableCellActions,
   tableCellNumeric,
 } from "@/components/ui";
+import { ArrowRightLeft, ArrowUpDown, Bookmark, Eye, type LucideIcon } from "lucide-react";
 import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
 import { usePagedRows } from "@/lib/use-pagination";
 
@@ -170,7 +172,7 @@ export default function InventoryPage() {
               <TableHead className={tableCellNumeric}>Cost</TableHead>
               <TableHead className={tableCellNumeric}>Value</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-[1%]" />
+              <TableHead className="w-[8%]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -191,20 +193,12 @@ export default function InventoryPage() {
                 <TableCell>
                   <StatusBadge value={r.status} />
                 </TableCell>
-                <TableCell className={tableCellActions}>
-                  <div className="btn-group inline-flex flex-wrap gap-0.5">
-                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setViewId(r.variantId)}>
-                      View
-                    </button>
-                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setAction({ type: "adjust", row: r })}>
-                      Adjust
-                    </button>
-                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setAction({ type: "transfer", row: r })}>
-                      Transfer
-                    </button>
-                    <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setAction({ type: "reserve", row: r })}>
-                      Reserve
-                    </button>
+                <TableCell className={tableCellActions }>
+                  <div className="grid grid-cols-2 place-items-center gap-1 ">
+                    <IconActionButton label="View" color="blue" icon={Eye} onClick={() => setViewId(r.variantId)} />
+                    <IconActionButton label="Adjust" color="amber" icon={ArrowUpDown} onClick={() => setAction({ type: "adjust", row: r })} />
+                    <IconActionButton label="Transfer" color="emerald" icon={ArrowRightLeft} onClick={() => setAction({ type: "transfer", row: r })} />
+                    <IconActionButton label="Reserve" color="violet" icon={Bookmark} onClick={() => setAction({ type: "reserve", row: r })} />
                   </div>
                 </TableCell>
               </TableRow>
@@ -393,5 +387,73 @@ function StockAction({
           </button>
         </div>
     </Modal>
+  );
+}
+
+const tooltipColors = {
+  blue: { bg: "bg-blue-600", arrow: "bg-blue-600" },
+  amber: { bg: "bg-amber-500", arrow: "bg-amber-500" },
+  emerald: { bg: "bg-emerald-500", arrow: "bg-emerald-500" },
+  violet: { bg: "bg-violet-500", arrow: "bg-violet-500" },
+} as const;
+
+function IconActionButton({
+  label,
+  color,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  color: keyof typeof tooltipColors;
+  icon: LucideIcon;
+  onClick: () => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ left: 0, top: 0 });
+  const c = tooltipColors[color];
+
+  const show = () => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPos({
+      left: Math.min(Math.max(rect.left + rect.width / 2, 44), window.innerWidth - 44),
+      top: rect.top - 10,
+    });
+    setOpen(true);
+  };
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      onMouseEnter={show}
+      onMouseLeave={() => setOpen(false)}
+      aria-label={label}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-primary transition-all duration-200 hover:bg-secondary hover:shadow"
+    >
+      <Icon className="h-5 w-5 transition-transform duration-200" />
+      <AnimatePresence>
+        {open ? (
+          <span
+            key="tooltip"
+            className="pointer-events-none fixed z-50"
+            style={{ left: pos.left, top: pos.top, transform: "translate(-50%, -100%)" }}
+          >
+            <motion.span
+              className={`relative block whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg ${c.bg}`}
+              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.92 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
+              {label}
+              <span className={`absolute left-1/2 top-full -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 ${c.arrow}`} />
+            </motion.span>
+          </span>
+        ) : null}
+      </AnimatePresence>
+    </button>
   );
 }

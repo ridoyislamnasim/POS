@@ -1,6 +1,5 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, fileUrl } from "@/lib/api";
@@ -13,7 +12,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PosCustomerPicker } from "@/components/pos/pos-customer-picker";
 import { DocumentActions } from "@/components/documents/document-actions";
 import { getApiErrorMessage, toastPos } from "@/lib/toast";
-import { itemDiscountAmount, lineCharge, roundMoney, transactionDiscountAmount } from "@/lib/money";
+import { itemDiscountAmount, lineCharge, moneyLabel, roundMoney, transactionDiscountAmount } from "@/lib/money";
 import { useDebounced } from "@/lib/use-debounce";
 import { emptyHintFor } from "@/lib/help";
 import { PageHelpButton } from "@/components/help/PageHelpButton";
@@ -63,6 +62,8 @@ export default function PosPage() {
   const [discValue, setDiscValue] = useState("0");
   const [discReason, setDiscReason] = useState("");
   const [holdsOpen, setHoldsOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closingCash, setClosingCash] = useState("");
   const [cash, setCash] = useState("");
@@ -72,7 +73,6 @@ export default function PosPage() {
   const t = dict[store.locale];
   const { me, can } = useMe();
   const canDiscount = can("discount.apply");
-  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!me?.branches.length) return;
@@ -273,6 +273,167 @@ const cartParts = useMemo(() => {
   const paidNow = Number(cash || 0) + Number(card || 0) + Number(mfs || 0);
   const dueNow = Math.max(cartTotal - paidNow, 0);
 
+  function cartMarkup(touch: boolean) {
+    const qtyCls = touch ? "h-11 w-11" : "h-9 w-9";
+    const rmCls = touch ? "h-10 w-10" : "h-8 w-8";
+    return store.cart.map((l) => {
+      const dType = l.discountType ?? "flat";
+      const flat = dType === "flat" ? Number(l.discountAmount || 0) : 0;
+      const pct = dType === "percent" ? Number(l.discountPercent || 0) : 0;
+      const calc = lineCharge({
+        unitPrice: Number(l.unitPrice),
+        qty: l.qty,
+        discount: flat,
+        discountPercent: pct,
+        taxRatePercent: Number(l.taxRate || 0),
+      });
+      const hasDisc = calc.discount > 0;
+      const chip =
+        dType === "percent" && pct > 0 ? `−${pct}%` : `−${moneyLabel(Number(l.discountAmount || 0))}`;
+      const chipOn =
+        "ml-1.5 shrink-0 rounded-full border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] tabular-nums backdrop-blur-sm transition-colors " +
+        (hasDisc
+          ? "border-amber-400/40 bg-amber-50/70 text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+          : "text-muted-foreground/80");
+      return (
+        <div
+          key={l.variantId}
+          className="group relative mb-1 flex flex-col overflow-hidden rounded-lg border border-border/50 bg-card py-1 pl-2 pr-1 transition-all duration-200 hover:border-primary/25 hover:bg-accent/40 hover:shadow-sm animate-in fade-in slide-in-from-top-1 sm:mb-1.5"
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-primary/60 to-primary/10 transition-opacity duration-200 group-hover:from-primary/80 group-hover:to-primary/40"
+          />
+          <div className="flex items-center justify-between gap-1">
+            <span className="truncate text-xs font-medium leading-tight">{l.name}</span>
+            <button
+              type="button"
+              aria-label={`Remove ${l.name}`}
+              className={`flex shrink-0 items-center justify-center rounded-full text-muted-foreground/60 transition-all duration-150 hover:scale-110 hover:bg-red-500/10 hover:text-red-500 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-red-400 ${rmCls}`}
+              onClick={() => store.remove(l.variantId)}
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex items-center gap-1 pl-1 text-[10px] leading-tight text-muted-foreground">
+            <span className="truncate">{l.variantLabel || l.sku}</span>
+            {l.variantLabel && l.sku ? <span className="shrink-0 font-mono opacity-70">{l.sku}</span> : null}
+            <span className="ml-auto hidden shrink-0 tabular-nums sm:inline">{moneyLabel(Number(l.unitPrice))}/ea</span>
+          </div>
+          <div className="flex items-center gap-1.5 pl-1">
+            <button
+              type="button"
+              aria-label={`Decrease qty for ${l.name}`}
+              className={`rounded-full bg-primary/5 text-muted-foreground transition-all duration-150 hover:scale-105 hover:bg-primary/15 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${qtyCls}`}
+              onClick={() => store.setQty(l.variantId, l.qty - 1)}
+            >
+              −
+            </button>
+            <span className={`text-center text-sm font-semibold tabular-nums ${touch ? "w-9" : "w-8"}`}>{l.qty}</span>
+            <button
+              type="button"
+              aria-label={`Increase qty for ${l.name}`}
+              className={`rounded-full bg-primary/5 text-muted-foreground transition-all duration-150 hover:scale-105 hover:bg-primary/15 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${qtyCls}`}
+              onClick={() => store.setQty(l.variantId, l.qty + 1)}
+            >
+              +
+            </button>
+            <span className="ml-auto flex items-baseline gap-1 tabular-nums transition-colors duration-200">
+              {hasDisc ? (
+                <>
+                  <span className="text-[10px] text-muted-foreground line-through">{moneyLabel(calc.extended)}</span>
+                  <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    {moneyLabel(calc.extended - calc.discount)}
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs font-semibold">{moneyLabel(calc.extended)}</span>
+              )}
+            </span>
+            {canDiscount ? (
+              <button
+                type="button"
+                data-help="pos-item-discount"
+                className={`${chipOn} cursor-pointer hover:border-amber-500/50 hover:bg-amber-50 dark:hover:bg-amber-500/15`}
+                onClick={() => openLineDiscount(l.variantId)}
+              >
+                {chip}
+              </button>
+            ) : hasDisc ? (
+              <span className={chipOn}>{chip}</span>
+            ) : null}
+          </div>
+        </div>
+      );
+    });
+  }
+
+  function posTotals(onPay?: () => void) {
+    const totalDiscount = roundMoney(cartParts.lineDiscount + cartParts.billDiscount);
+    return (
+      <div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Subtotal</span>
+          <span className="tabular-nums text-foreground/90">{moneyLabel(cartParts.subtotal)}</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+          {canDiscount ? (
+            <button
+              type="button"
+              data-help="pos-bill-discount"
+              className="shrink-0 cursor-pointer text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              onClick={openBillDiscount}
+            >
+              {t.discount} (F8)
+            </button>
+          ) : (
+            <span className="shrink-0 text-muted-foreground">{t.discount}</span>
+          )}
+          <span
+            className={`tabular-nums ${totalDiscount > 0 ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+          >
+            {totalDiscount > 0 ? `−${moneyLabel(totalDiscount)}` : moneyLabel(0)}
+          </span>
+        </div>
+        {cartParts.lineDiscount > 0 && cartParts.billDiscount > 0 ? (
+          <div className="text-right text-[10px] leading-tight text-muted-foreground">
+            items −{moneyLabel(cartParts.lineDiscount)} · bill −{moneyLabel(cartParts.billDiscount)}
+          </div>
+        ) : null}
+        {cartParts.tax > 0 ? (
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">VAT</span>
+            <span className="tabular-nums text-foreground/90">{moneyLabel(cartParts.tax)}</span>
+          </div>
+        ) : null}
+        {store.lastSaleId ? (
+          <div className="mt-2">
+            <DocumentActions type="sale" id={store.lastSaleId} number={store.lastInvoice ?? undefined} size="xs" compact preview />
+          </div>
+        ) : null}
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            data-help="pos-hold"
+            className={btnGhost + " h-11"}
+            onClick={() => (store.cart.length ? hold.mutate() : setHoldsOpen(true))}
+          >
+            {t.hold} (F9)
+          </button>
+          <button
+            type="button"
+            data-help="pos-pay"
+            className={btnPrimary + " h-11"}
+            onClick={() => (onPay ? onPay() : setPayOpen(true))}
+            disabled={!store.cart.length}
+          >
+            {t.pay} {moneyLabel(cartTotal)}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
     if (!payOpen) return;
     setCash(cartTotal.toFixed(2));
@@ -292,6 +453,7 @@ const cartParts = useMemo(() => {
       }
       if (e.key === "F8") {
         e.preventDefault();
+        setCartOpen(false);
         openBillDiscount();
       }
       if (e.key === "F9") {
@@ -301,14 +463,19 @@ const cartParts = useMemo(() => {
       }
       if (e.key === "F10") {
         e.preventDefault();
-        if (store.cart.length) setPayOpen(true);
+        if (store.cart.length) {
+          setCartOpen(false);
+          setPayOpen(true);
+        }
       }
       if (e.key === "Escape") {
-        if (payOpen || discEdit || holdsOpen || closeOpen) {
+        if (payOpen || discEdit || holdsOpen || closeOpen || cartOpen || shortcutsOpen) {
           setPayOpen(false);
           setDiscEdit(null);
           setHoldsOpen(false);
           setCloseOpen(false);
+          setCartOpen(false);
+          setShortcutsOpen(false);
           return;
         }
         store.clear();
@@ -317,6 +484,7 @@ const cartParts = useMemo(() => {
         e.preventDefault();
         if (!store.cart.length || pay.isPending) return;
         if (!payOpen) {
+          setCartOpen(false);
           setPayOpen(true);
           return;
         }
@@ -325,7 +493,7 @@ const cartParts = useMemo(() => {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, hold, pay, canDiscount, payOpen, discEdit, holdsOpen, closeOpen]);
+  }, [store, hold, pay, canDiscount, payOpen, discEdit, holdsOpen, closeOpen, cartOpen, shortcutsOpen]);
 
   async function onScan(e: React.FormEvent) {
     e.preventDefault();
@@ -461,189 +629,156 @@ const cartParts = useMemo(() => {
           <PageHelpButton className="h-8 w-8 text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid h-full min-h-0 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_360px]">
-          <section className="flex min-h-0 flex-col border-r bg-card">
-            <form onSubmit={onScan} className="flex items-center gap-2 border-b border-orange-100/80 bg-gradient-to-r from-orange-50/70 to-transparent p-2 dark:border-orange-950/40 dark:from-orange-950/20">
-              <input
-                ref={scanRef}
-                data-help="pos-scan"
-                autoFocus
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder={`${t.search}  (F2)`}
-                className={inputClass + " h-12 flex-1"}
-              />
-              <PageHelpButton className="h-10 w-10 shrink-0" />
-            </form>
-            {matrixProduct ? (
-              <Matrix
-                product={matrixProduct}
-                locationId={station().locationId}
-                onPick={(v) => addVariant(matrixProduct, v)}
-                onClose={() => setMatrixProduct(null)}
-              />
-            ) : (
-              <div className="grid grid-cols-2 gap-2 overflow-auto p-2 sm:grid-cols-3 md:grid-cols-4">
-                {!catalog.length ? (
-                  <div className="col-span-full">
-                    <EmptyState title="No products" hint={emptyHintFor("/pos")} />
-                  </div>
-                ) : null}
-                {catalog.map((p) => {
-                  const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
-                  return (
-                  <motion.button
-                    key={p.id}
-                    type="button"
-                    onClick={() => pickProduct(p)}
-                    whileHover={reduceMotion ? undefined : { y: -2, boxShadow: "0 8px 16px rgba(194,65,12,0.12)" }}
-                    whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-                    transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                    className="min-h-[80px] overflow-hidden rounded-lg border border-slate-200 bg-card p-0 text-left hover:border-primary dark:border-slate-800"
-                  >
-                    {img ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={fileUrl(img)} alt="" className="h-20 w-full object-cover" />
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[1fr_340px]">
+            <section className="flex min-h-0 flex-col bg-card lg:border-r lg:border-border/60">
+              <form
+                onSubmit={onScan}
+                className="flex shrink-0 items-center gap-1.5 border-b border-border/60 px-2 py-1.5 bg-background"
+              >
+                <input
+                  ref={scanRef}
+                  data-help="pos-scan"
+                  autoFocus
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={`${t.search}  (F2)`}
+                  className={inputClass + " h-11 flex-1 text-[15px] sm:h-10 sm:text-sm"}
+                />
+                <PageHelpButton className="h-10 w-10 shrink-0 sm:h-9 sm:w-9" />
+              </form>
+              {matrixProduct ? (
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <Matrix
+                    product={matrixProduct}
+                    locationId={station().locationId}
+                    onPick={(v) => addVariant(matrixProduct, v)}
+                    onClose={() => setMatrixProduct(null)}
+                  />
+                </div>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+                  <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(105px,1fr))]">
+                    {!catalog.length ? (
+                      <div className="col-span-full">
+                        <EmptyState title="No products" hint={emptyHintFor("/pos")} />
+                      </div>
                     ) : null}
-                    <div className="p-3">
-                      <div className="text-sm font-medium">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">{p.code}</div>
-                    </div>
-                  </motion.button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-          <aside className="flex min-h-0 flex-col bg-background">
-            <div className="flex-1 overflow-auto p-2" data-help="pos-cart">
-              <div data-help="pos-customer">
-                <PosCustomerPicker openSignal={customerFocus} />
-              </div>
-              {store.cart.map((l) => {
-                const dType = l.discountType ?? "flat";
-                const flat = dType === "flat" ? Number(l.discountAmount || 0) : 0;
-                const pct = dType === "percent" ? Number(l.discountPercent || 0) : 0;
-                const calc = lineCharge({
-                  unitPrice: Number(l.unitPrice),
-                  qty: l.qty,
-                  discount: flat,
-                  discountPercent: pct,
-                  taxRatePercent: Number(l.taxRate || 0),
-                });
-                const hasDisc = calc.discount > 0;
-                const chipLabel =
-                  dType === "percent" && pct > 0 ? `−${pct}%` : `−৳${Number(l.discountAmount || 0).toFixed(2)}`;
-                const chipCls =
-                  "rounded-full border px-2 py-0.5 text-[11px] tabular-nums " +
-                  (hasDisc
-                    ? "border-amber-500/60 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                    : "border-slate-300 text-muted-foreground");
-                return (
-                  <div key={l.variantId} className="mb-2 rounded-lg border bg-card p-2 shadow-sm">
-                    <div className="flex justify-between text-sm font-medium">
-                      <span>{l.name}</span>
-                      <button type="button" className="text-muted-foreground" onClick={() => store.remove(l.variantId)}>
-                        ×
-                      </button>
-                    </div>
-                    <div className="text-xs text-muted-foreground">{l.variantLabel}</div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <button type="button" className="h-10 w-10 rounded-md border" onClick={() => store.setQty(l.variantId, l.qty - 1)}>
-                        −
-                      </button>
-                      <span className="w-8 text-center tabular-nums">{l.qty}</span>
-                      <button type="button" className="h-10 w-10 rounded-md border" onClick={() => store.setQty(l.variantId, l.qty + 1)}>
-                        +
-                      </button>
-                      <span className="ml-1 text-sm tabular-nums">
-                        {hasDisc ? (
-                          <>
-                            <span className="mr-1 line-through text-muted-foreground">৳{calc.extended.toFixed(2)}</span>
-                            <span className="font-medium">৳{(calc.extended - calc.discount).toFixed(2)}</span>
-                          </>
-                        ) : (
-                          <span className="font-medium">৳{calc.extended.toFixed(2)}</span>
-                        )}
-                      </span>
-                      {canDiscount ? (
+                    {catalog.map((p) => {
+                      const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                      const price = Number(p.variants[0]?.price ?? 0);
+                      return (
                         <button
+                          key={p.id}
                           type="button"
-                          data-help="pos-item-discount"
-                          className={`${chipCls} ml-auto cursor-pointer`}
-                          onClick={() => openLineDiscount(l.variantId)}
+                          onClick={() => pickProduct(p)}
+                          className="group flex min-h-[76px] flex-col overflow-hidden rounded-md border border-border/80 bg-card text-left transition-colors hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                         >
-                          {chipLabel}
+                          {img ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={fileUrl(img)} alt="" className="h-12 w-full object-cover" loading="lazy" />
+                          ) : (
+                            <div className="h-12 w-full border-b border-border/60 bg-muted/40" />
+                          )}
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-1.5 py-1">
+                            <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                            <span className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
+                              <span className="truncate">{p.code}</span>
+                              <span className="shrink-0 font-semibold tabular-nums text-foreground/80">
+                                {moneyLabel(price)}
+                              </span>
+                            </span>
+                          </div>
                         </button>
-                      ) : hasDisc ? (
-                        <span className={`${chipCls} ml-auto`}>{chipLabel}</span>
-                      ) : null}
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                  
+                </div>
+              )}
+              <button
+          type="button"
+          data-help="pos-close-shift"
+          className="mt-1.5 w-full text-[11px] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setCloseOpen(true)}
+        >
+          Close shift
+        </button>
+        <div
+          data-help="pos-shortcuts"
+          className="mt-1.5 border-t border-dashed pt-1.5 text-center text-[10px] text-muted-foreground"
+        >
+          F2 scan · F4 customer · F8 discount · F9 hold · F10 pay · ESC clear
+        </div>
+            </section>
+            <aside className="hidden min-h-0 flex-col bg-background lg:flex">
+              <div className="shrink-0 border-b border-border/60 p-1.5">
+                <div data-help="pos-customer">
+                  <PosCustomerPicker openSignal={customerFocus} />
+                </div>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col">
+                <div className="shrink-0 px-1.5 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Cart{store.cart.length ? ` · ${store.cart.length}` : ""}
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-help="pos-cart">
+                  {store.cart.length ? (
+                    cartMarkup(false)
+                  ) : (
+                    <p className="px-1 py-2 text-xs text-muted-foreground">Empty — scan or tap a product</p>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0 border-t border-border/60 bg-background p-2">{posTotals()}</div>
+            </aside>
+          </div>
+          <div className="shrink-0 border-t border-border/60 bg-background p-1.5 lg:hidden">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className={btnGhost + " h-12 shrink-0 px-3 tabular-nums"}
+                onClick={() => (store.cart.length ? setCartOpen(true) : setHoldsOpen(true))}
+              >
+                {store.cart.length
+                  ? `${store.cart.length} item${store.cart.length === 1 ? "" : "s"}`
+                  : "Recall holds"}
+              </button>
+              <button
+                type="button"
+                className={btnPrimary + " h-12 flex-1 text-base"}
+                onClick={() => setPayOpen(true)}
+                disabled={!store.cart.length}
+              >
+                {t.pay} {moneyLabel(cartTotal)}
+              </button>
             </div>
-            <div className="border-t border-orange-100 bg-gradient-to-t from-orange-50/60 to-card p-3 shadow-sm dark:border-orange-950/40 dark:from-orange-950/25">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Subtotal</span>
-                <span className="tabular-nums">৳ {cartParts.subtotal.toFixed(2)}</span>
-              </div>
-              {cartParts.lineDiscount > 0 ? (
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Item discount</span>
-                  <span className="tabular-nums">−৳ {cartParts.lineDiscount.toFixed(2)}</span>
-                </div>
-              ) : null}
-              <div className="flex items-center justify-between text-xs">
-                {canDiscount ? (
-                  <button type="button" data-help="pos-bill-discount" className="cursor-pointer text-muted-foreground hover:text-primary" onClick={openBillDiscount}>
-                    {t.discount} (F8)
-                  </button>
-                ) : (
-                  <span className="text-muted-foreground">{t.discount} (F8)</span>
-                )}
-                <span className={`tabular-nums ${cartParts.billDiscount > 0 ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
-                  −৳ {cartParts.billDiscount.toFixed(2)}
-                </span>
-              </div>
-              {cartParts.tax > 0 ? (
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>VAT</span>
-                  <span className="tabular-nums">৳ {cartParts.tax.toFixed(2)}</span>
-                </div>
-              ) : null}
-              <div className="flex justify-between text-sm">
-                <span>{t.total}</span>
-                <span className="text-xl font-semibold tabular-nums text-amber-700 dark:text-amber-400">৳ {cartTotal.toFixed(2)}</span>
-              </div>
-              {store.lastSaleId ? (
-                <div className="mt-2">
-                  <DocumentActions type="sale" id={store.lastSaleId} number={store.lastInvoice ?? undefined} size="sm" compact={false} preview />
-                </div>
-              ) : null}
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button type="button" data-help="pos-hold" className={btnGhost} onClick={() => (store.cart.length ? hold.mutate() : setHoldsOpen(true))}>
-                  {t.hold} (F9)
-                </button>
-                <button type="button" data-help="pos-pay" className={btnPrimary} onClick={() => setPayOpen(true)} disabled={!store.cart.length}>
-                  {t.pay} (F10)
-                </button>
-                <button type="button" data-help="pos-close-shift" className={btnGhost + " col-span-2"} onClick={() => setCloseOpen(true)}>
-                  Close shift
-                </button>
-              </div>
-              <div data-help="pos-shortcuts" className="mt-2 text-[10px] text-muted-foreground">F4 customer · F8 discount · Ctrl+Enter complete · ESC clear</div>
+            <div className="mt-1 flex items-center justify-center gap-3 border-t border-dashed pt-1">
+              <button
+                type="button"
+                className="text-[11px] text-muted-foreground transition-colors hover:text-primary active:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setCloseOpen(true)}
+              >
+                Close shift
+              </button>
+              <span aria-hidden className="h-3 w-px bg-border" />
+              <button
+                type="button"
+                className="text-[11px] text-muted-foreground transition-colors hover:text-primary active:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setShortcutsOpen(true)}
+              >
+                Shortcuts
+              </button>
             </div>
-          </aside>
+          </div>
         </div>
       )}
 
       {payOpen ? (
         <Modal title={t.pay} onClose={() => setPayOpen(false)}>
-          <div className="text-2xl tabular-nums">৳ {cartTotal.toFixed(2)}</div>
+          <div className="text-2xl font-semibold tabular-nums">{moneyLabel(cartTotal)}</div>
           {cartParts.tax > 0 ? (
             <p className="text-xs text-muted-foreground">
-              Subtotal ৳ {cartParts.subtotal.toFixed(2)} · VAT ৳ {cartParts.tax.toFixed(2)}
+              Subtotal {moneyLabel(cartParts.subtotal)} · VAT {moneyLabel(cartParts.tax)}
             </p>
           ) : null}
           <p className="mt-1 text-xs text-muted-foreground">
@@ -656,8 +791,8 @@ const cartParts = useMemo(() => {
           <label className="mt-2 block text-sm">MFS</label>
           <input className={inputClass + " mt-1"} value={mfs} onChange={(e) => setMfs(e.target.value)} />
           <div className="mt-2 text-sm text-muted-foreground">
-            Paid ৳ {paidNow.toFixed(2)}
-            {dueNow > 0 ? ` · Due ৳ ${dueNow.toFixed(2)}${store.customer ? "" : " (add customer)"}` : ""}
+            Paid {moneyLabel(paidNow)}
+            {dueNow > 0 ? ` · Due ${moneyLabel(dueNow)}${store.customer ? "" : " (add customer)"}` : ""}
           </div>
           <div className="mt-3 flex gap-2">
             <button type="button" className={btnGhost + " flex-1"} onClick={() => setPayOpen(false)}>
@@ -735,6 +870,43 @@ const cartParts = useMemo(() => {
               {h.id.slice(-6)} · {(h.payload?.cart ?? []).length} lines
             </button>
           ))}
+        </Modal>
+      ) : null}
+      {cartOpen ? (
+        <Modal title={`Cart${store.cart.length ? ` (${store.cart.length})` : ""}`} size="xl" onClose={() => setCartOpen(false)}>
+          {store.cart.length ? (
+            <div className="max-h-[52vh] overflow-y-auto">{cartMarkup(true)}</div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Cart is empty.</p>
+          )}
+          <div className="mt-3">
+            {posTotals(() => {
+              setCartOpen(false);
+              setPayOpen(true);
+            })}
+          </div>
+        </Modal>
+      ) : null}
+      {shortcutsOpen ? (
+        <Modal title="Keyboard shortcuts" size="sm" onClose={() => setShortcutsOpen(false)}>
+          <ul className="space-y-1.5 text-sm">
+            {[
+              ["F2", "Focus scan / search"],
+              ["F4", "Find or add customer"],
+              ["F8", "Bill discount (with permission)"],
+              ["F9", "Hold cart / recall holds"],
+              ["F10", "Pay"],
+              ["Ctrl+Enter", "Complete sale"],
+              ["ESC", "Clear cart / close dialogs"],
+            ].map(([key, label]) => (
+              <li key={key} className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">{label}</span>
+                <kbd className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] font-medium tabular-nums">
+                  {key}
+                </kbd>
+              </li>
+            ))}
+          </ul>
         </Modal>
       ) : null}
       <ConfirmDialog
