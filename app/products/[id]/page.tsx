@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -22,17 +23,20 @@ import {
 } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ProductForm, type ProductLoaded } from "@/components/catalog/product-form";
-import { printBarcodeLabels } from "@/lib/print-barcodes";
-import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
+import { BarcodePrintDialog } from "@/components/catalog/barcode-print-dialog";
+import type { BarcodeLabel } from "@/lib/print-barcodes";
+import { toastError, toastSuccess } from "@/lib/toast";
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const qc = useQueryClient();
   const product = useQuery({
     queryKey: ["product", id],
     queryFn: () => api<ProductLoaded>(`/api/v1/catalog/products/${id}`),
   });
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const archive = useMutation({
     mutationFn: () => api(`/api/v1/catalog/products/${id}/archive`, { method: "POST" }),
     onSuccess: () => {
@@ -67,25 +71,33 @@ export default function ProductDetailPage() {
     );
   }
   const p = product.data;
+  const printLabels: BarcodeLabel[] = (p.variants ?? []).flatMap((v) => {
+    const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
+    return codes.map((code) => ({
+      code,
+      sku: v.sku,
+      name: p.name,
+      price: Number(v.price).toFixed(2),
+      kind: "CODE128",
+    }));
+  });
 
   return (
     <AppShell>
+      <button type="button" className={btnGhost + " mb-2 h-8 px-2 text-xs"} onClick={() => router.push("/products")}>
+        <ArrowLeft className="mr-1 h-3.5 w-3.5" aria-hidden />
+        Back to products
+      </button>
       <PageHeader title={p.name} description={`${p.code} · ${p.type}`}>
         <button
           type="button"
           className={btnGhost}
           onClick={() => {
-            const labels = (p.variants ?? []).flatMap((v) => {
-              const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
-              return codes.map((code) => ({
-                code,
-                sku: v.sku,
-                name: p.name,
-                price: Number(v.price).toFixed(2),
-                kind: "CODE128",
-              }));
-            });
-            if (!printBarcodeLabels(labels)) toastWarn("Allow pop-ups to print barcode labels");
+            if (!printLabels.length) {
+              toastError("No barcodes to print");
+              return;
+            }
+            setPrintOpen(true);
           }}
         >
           Print barcodes
@@ -164,6 +176,12 @@ export default function ProductDetailPage() {
         loading={archive.isPending}
         onClose={() => setArchiveOpen(false)}
         onConfirm={() => archive.mutate()}
+      />
+      <BarcodePrintDialog
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        title={`Print labels · ${p.name}`}
+        labels={printLabels}
       />
     </AppShell>
   );

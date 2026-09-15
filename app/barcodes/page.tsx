@@ -4,10 +4,11 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { usePagedRows } from "@/lib/use-pagination";
-import { printBarcodeLabels } from "@/lib/print-barcodes";
+import { BarcodePrintDialog } from "@/components/catalog/barcode-print-dialog";
+import type { BarcodeLabel } from "@/lib/print-barcodes";
 import { AppShell } from "@/components/app-shell";
 import { Button, DataTable, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, inputClass, IconActionButton } from "@/components/ui";
-import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { Printer } from "lucide-react";
 
 type Code = { code: string; kind: string; sku: string; label: string };
@@ -19,6 +20,7 @@ export default function BarcodesPage() {
   const [copies, setCopies] = useState("1");
   const [size, setSize] = useState<"small" | "standard" | "shelf">("standard");
   const [codes, setCodes] = useState<Code[]>([]);
+  const [printTargets, setPrintTargets] = useState<Code[] | null>(null);
   const { rows, pager } = usePagedRows(codes);
   const gen = useMutation<Code[], Error, void>({
     mutationFn: () => api<Code[]>(`/api/v1/extras/barcodes/generate?sku=${encodeURIComponent(sku)}&kind=${kind}&count=${count}`),
@@ -29,12 +31,13 @@ export default function BarcodesPage() {
     onError: (e: Error) => toastError(e, "Generate failed"),
   });
 
+  function toLabels(list: Code[]): BarcodeLabel[] {
+    return list.map((r) => ({ code: r.code, sku: r.sku, name: r.label, kind: r.kind }));
+  }
+
   function print(list: Code[]) {
-    const ok = printBarcodeLabels(
-      list.map((r) => ({ code: r.code, sku: r.sku, name: r.label, kind: r.kind })),
-      { copies: Number(copies), size },
-    );
-    if (!ok) toastWarn("Allow pop-ups to print barcode labels");
+    if (!list.length) return;
+    setPrintTargets(list);
   }
 
   return (
@@ -84,6 +87,13 @@ export default function BarcodesPage() {
         </Table>
         <TablePagination {...pager} />
       </DataTable>
+      <BarcodePrintDialog
+        open={printTargets !== null}
+        onClose={() => setPrintTargets(null)}
+        title="Print barcode labels"
+        labels={printTargets ? toLabels(printTargets) : []}
+        initial={{ copies: Number(copies) || 1, size }}
+      />
     </AppShell>
   );
 }

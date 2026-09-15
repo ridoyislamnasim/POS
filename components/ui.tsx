@@ -248,7 +248,7 @@ export function Field({
   error,
   hint,
 }: {
-  label: string;
+  label: ReactNode;
   children: ReactNode;
   error?: string;
   hint?: string;

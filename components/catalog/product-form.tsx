@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { Field, btnGhost, btnPrimary, inputClass } from "@/components/ui";
+import { Field, InfoTip, btnGhost, btnPrimary, inputClass } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastCreated, toastError, toastSuccess, toastWarn } from "@/lib/toast";
 import { SearchSelect } from "@/components/catalog/search-select";
@@ -94,7 +94,7 @@ export type ProductLoaded = {
     imageUrl?: string | null;
     barcodes: { code: string }[];
     stock: { locationId: string; quantity: string }[];
-    attributes: { option: { id: string; label: string } }[];
+    attributes: { option: { id: string; label: string; definition?: { id: string } | null } }[];
   }[];
 };
 
@@ -115,6 +115,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [dropVariant, setDropVariant] = useState<string | null>(null);
+  const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
   const [form, setForm] = useState(() => ({
     name: product?.name ?? "",
     code: product?.code ?? "",
@@ -192,21 +193,29 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
       return;
     }
     const combos = cartesian(lists as { id: string; label: string; value: string }[][]);
-    const rows: VariantRow[] = combos.map((combo) => ({
-      id: combo.map((o) => o.id).join("|"),
-      optionIds: combo.map((o) => o.id),
-      label: combo.map((o) => o.label).join(" / "),
-      sku: `${form.code || "SKU"}-${combo.map((o) => o.value).join("-")}`.toUpperCase(),
-      barcode: "",
-      price: form.sellingPrice,
-      cost: form.purchasePrice,
-      discount: form.discount,
-      minStock: form.minStock,
-      weight: "",
-      imageUrl: "",
-      status: "ACTIVE",
-      opening: form.opening,
-    }));
+    // Preserve already-loaded / already-edited rows so regenerating never wipes
+    // per-variant prices, SKUs, or saved variant ids.
+    const prev = new Map(form.variants.map((r) => [r.optionIds.slice().sort().join("|"), r]));
+    const rows: VariantRow[] = combos.map((combo) => {
+      const key = combo.map((o) => o.id).sort().join("|");
+      const old = prev.get(key);
+      if (old) return { ...old, label: combo.map((o) => o.label).join(" / ") };
+      return {
+        id: `new|${combo.map((o) => o.id).join("|")}`,
+        optionIds: combo.map((o) => o.id),
+        label: combo.map((o) => o.label).join(" / "),
+        sku: `${form.code || "SKU"}-${combo.map((o) => o.value).join("-")}`.toUpperCase(),
+        barcode: "",
+        price: form.sellingPrice,
+        cost: form.purchasePrice,
+        discount: form.discount,
+        minStock: form.minStock,
+        weight: "",
+        imageUrl: "",
+        status: "ACTIVE",
+        opening: form.opening,
+      };
+    });
     setForm((s) => ({ ...s, variants: rows }));
   }
 
@@ -284,6 +293,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
         variants:
           form.type === "VARIABLE"
             ? form.variants.map((v) => ({
+                id: v.id.startsWith("new|") ? undefined : v.id,
                 optionIds: v.optionIds,
                 sku: v.sku,
                 barcode: v.barcode || undefined,
@@ -302,6 +312,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
                 })),
               }))
             : [],
+        removedVariantIds: form.type === "VARIABLE" ? removedVariantIds : [],
       };
       if (isEdit) {
         return api(`/api/v1/catalog/products/${product!.id}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -317,18 +328,70 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
   });
 
   const locations = locs.data ?? [];
-  const openingHydrated = useRef(false);
+  const hydratedProductId = useRef<string | null>(null);
   useEffect(() => {
-    if (!locations.length || openingHydrated.current) return;
-    openingHydrated.current = true;
+    if (!locations.length) return;
+    // Create mode: just seed empty opening stock once locations arrive.
+    if (!product) {
+      setForm((s) => (Object.keys(s.opening).length ? s : { ...s, opening: emptyOpening(locations) }));
+      return;
+    }
+    // Edit mode: hydrate saved variants (with full details), attribute picks,
+    // and opening stock exactly once per product. Attr definitions must be
+    // loaded first so option ids can be mapped back to their attributes.
+    if (hydratedProductId.current === product.id) return;
+    const attrDefs = attrs.data ?? [];
+    if (!attrDefs.length && (product.variants ?? []).some((v) => (v.attributes ?? []).length)) return;
+    hydratedProductId.current = product.id;
     setForm((s) => {
-      if (Object.keys(s.opening).length) return s;
-      const fromProduct =
-        product?.variants?.[0]?.stock?.length &&
-        Object.fromEntries(product.variants[0].stock.map((st) => [st.locationId, st.quantity]));
-      return { ...s, opening: fromProduct || emptyOpening(locations) };
+      if (s.variants.length) return s;
+      const defOfOption = new Map<string, string>();
+      for (const d of attrDefs) for (const o of d.options) defOfOption.set(o.id, d.id);
+      const rows: VariantRow[] = (product.variants ?? []).map((v) => {
+        const optionIds = (v.attributes ?? []).map((a) => a.option.id);
+        const labels = (v.attributes ?? []).map((a) => a.option.label).filter(Boolean);
+        const opening: Record<string, string> = {};
+        for (const l of locations) opening[l.id] = "0";
+        for (const st of v.stock ?? []) opening[st.locationId] = String(st.quantity ?? "0");
+        return {
+          id: v.id,
+          optionIds,
+          label: labels.join(" / ") || v.variantKey || "Default",
+          sku: v.sku ?? "",
+          barcode: v.barcodes?.[0]?.code ?? "",
+          price: String(v.price ?? "0"),
+          cost: String(v.cost ?? "0"),
+          discount: String(v.discount ?? "0"),
+          minStock: String(v.minStock ?? "0"),
+          weight: v.weight ?? "",
+          imageUrl: v.imageUrl ?? "",
+          status: v.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
+          opening,
+        };
+      });
+      const selectedAttrIds: string[] = [];
+      const selectedOptions: Record<string, string[]> = {};
+      for (const row of rows) {
+        for (const oid of row.optionIds) {
+          const did = defOfOption.get(oid);
+          if (!did) continue;
+          if (!selectedAttrIds.includes(did)) selectedAttrIds.push(did);
+          const cur = selectedOptions[did] ?? [];
+          if (!cur.includes(oid)) selectedOptions[did] = [...cur, oid];
+        }
+      }
+      const firstStock = product.variants?.[0]?.stock?.length
+        ? Object.fromEntries(product.variants[0].stock.map((st) => [st.locationId, String(st.quantity ?? "0")]))
+        : null;
+      return {
+        ...s,
+        variants: rows,
+        selectedAttrIds: s.selectedAttrIds.length ? s.selectedAttrIds : selectedAttrIds,
+        selectedOptions: Object.keys(s.selectedOptions).length ? s.selectedOptions : selectedOptions,
+        opening: Object.keys(s.opening).length ? s.opening : firstStock || emptyOpening(locations),
+      };
     });
-  }, [locations, product]);
+  }, [locations, product, attrs.data]);
 
   return (
     <div className="relative space-y-3 pb-20">
@@ -362,7 +425,17 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
               ))}
             </select>
           </Field>
-          <Field label="Barcode / QR">
+          <Field
+            label={
+              <span className="inline-flex items-center gap-1">
+                Barcode / QR
+                <InfoTip
+                  label="Product barcode"
+                  description="For products without variants (Simple). Variable products need a unique barcode per variant below."
+                />
+              </span>
+            }
+          >
             <input className={inputClass} value={form.barcode} onChange={(e) => set("barcode", e.target.value)} />
           </Field>
           <Field label="Status">
@@ -486,16 +559,31 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
               ))}
           </div>
           <button type="button" className={btnPrimary + " mt-2"} onClick={generateVariants}>
-            Generate combinations ({form.variants.length})
+            Generate combinations ({form.variants.length}
+            {form.variants.some((v) => !v.id.startsWith("new|"))
+              ? ` · ${form.variants.filter((v) => !v.id.startsWith("new|")).length} saved`
+              : ""}
+            {form.variants.some((v) => v.id.startsWith("new|"))
+              ? ` · ${form.variants.filter((v) => v.id.startsWith("new|")).length} new`
+              : ""})
           </button>
           {form.variants.length ? (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[980px] text-xs">
+            <>
+              <div className="mt-3 overflow-x-auto rounded-md border touch-pan-x">
+              <table className="w-full min-w-[1020px] border-collapse text-xs">
                 <thead>
-                  <tr className="text-left text-muted-foreground">
-                    <th className="py-1">Variant</th>
+                  <tr className="whitespace-nowrap text-left text-muted-foreground">
+                    <th className="sticky left-0 z-10 min-w-[150px] border-r bg-muted/60 py-1 pl-2 pr-2">Variant</th>
                     <th>SKU</th>
-                    <th>Barcode</th>
+                    <th>
+                      <span className="inline-flex items-center gap-1">
+                        Barcode
+                        <InfoTip
+                          label="Variant barcode"
+                          description="Each variant needs its own unique barcode for accurate POS scanning — e.g. Red / S and Red / M must differ."
+                        />
+                      </span>
+                    </th>
                     <th>Price</th>
                     <th>Cost</th>
                     <th>Disc.</th>
@@ -511,7 +599,14 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
                 <tbody>
                   {form.variants.map((v) => (
                     <tr key={v.id} className="border-t">
-                      <td className="py-1 pr-2">{v.label}</td>
+                      <td className="sticky left-0 z-10 border-r bg-card py-1 pl-2 pr-2">
+                        <span className="font-medium">{v.label}</span>
+                        {v.id.startsWith("new|") ? (
+                          <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                            New
+                          </span>
+                        ) : null}
+                      </td>
                       <td>
                         <input className={inputClass + " h-8 w-28"} value={v.sku} onChange={(e) => patchVar(v.id, { sku: e.target.value })} />
                       </td>
@@ -559,7 +654,9 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground md:hidden">Swipe sideways to see all columns — the variant name stays pinned.</p>
+            </>
           ) : (
             <p className="mt-2 text-xs text-muted-foreground">No combinations yet.</p>
           )}
@@ -659,11 +756,18 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
       <ConfirmDialog
         open={dropVariant != null}
         title="Remove variant?"
-        description="This combination will be dropped from the generated list."
+        description={
+          dropVariant && !dropVariant.startsWith("new|")
+            ? "This saved variant will be permanently deleted on save (stock and barcode history go with it)."
+            : "This combination will be dropped from the generated list."
+        }
         confirmLabel="Remove"
         onClose={() => setDropVariant(null)}
         onConfirm={() => {
           setForm((s) => ({ ...s, variants: s.variants.filter((row) => row.id !== dropVariant) }));
+          if (dropVariant && !dropVariant.startsWith("new|")) {
+            setRemovedVariantIds((ids) => (ids.includes(dropVariant) ? ids : [...ids, dropVariant]));
+          }
           setDropVariant(null);
         }}
       />

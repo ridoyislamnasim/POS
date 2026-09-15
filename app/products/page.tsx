@@ -25,8 +25,9 @@ import {
   IconActionButton,
 } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { printBarcodeLabels } from "@/lib/print-barcodes";
-import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
+import { BarcodePrintDialog } from "@/components/catalog/barcode-print-dialog";
+import type { BarcodeLabel } from "@/lib/print-barcodes";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { Archive, Edit2, Printer } from "lucide-react";
 
 type Product = {
@@ -48,6 +49,7 @@ type Product = {
 export default function ProductsPage() {
   const qc = useQueryClient();
   const [pendingArchive, setPendingArchive] = useState<Product | null>(null);
+  const [printLabels, setPrintLabels] = useState<{ title: string; labels: BarcodeLabel[] } | null>(null);
   const list = useServerList<Product>("admin-products", "/api/v1/catalog/products");
   const archive = useMutation({
     mutationFn: (id: string) => api(`/api/v1/catalog/products/${id}/archive`, { method: "POST" }),
@@ -59,9 +61,26 @@ export default function ProductsPage() {
     onError: (e) => toastError(e, "Could not archive product"),
   });
 
+  function labelsFor(p: Product): BarcodeLabel[] {
+    return p.variants.flatMap((v) => {
+      const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
+      return codes.map((code) => ({
+        code,
+        sku: v.sku,
+        name: p.name,
+        price: Number(v.price).toFixed(2),
+        kind: "CODE128",
+      }));
+    });
+  }
+
   return (
     <AppShell>
       <PageHeader title="Products" description="Catalogue, variants, and archive.">
+        <Button variant="outline" disabled={!list.rows.length} onClick={() => setPrintLabels({ title: "Print all barcode labels", labels: list.rows.flatMap(labelsFor) })}>
+          <Printer className="mr-1.5 h-4 w-4" aria-hidden />
+          Print labels
+        </Button>
         <Link href="/products/new" className={btnPrimary}>
           Add product
         </Link>
@@ -117,19 +136,7 @@ export default function ProductsPage() {
                     <StatusBadge value={p.status} />
                   </TableCell>
                   <TableCell className={tableCellActions}>
-                    <IconActionButton icon={<Printer className="h-3.5 w-3.5" />} label="Print barcode labels" onClick={() => {
-                      const labels = p.variants.flatMap((v) => {
-                        const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
-                        return codes.map((code) => ({
-                          code,
-                          sku: v.sku,
-                          name: p.name,
-                          price: Number(v.price).toFixed(2),
-                          kind: "CODE128",
-                        }));
-                      });
-                      if (!printBarcodeLabels(labels)) toastWarn("Allow pop-ups to print barcode labels");
-                    }} />
+                    <IconActionButton icon={<Printer className="h-3.5 w-3.5" />} label="Print barcode labels" onClick={() => setPrintLabels({ title: `Print labels · ${p.name}`, labels: labelsFor(p) })} />
                     <Link href={`/products/${p.id}`} className="mr-1">
                       <IconActionButton icon={<Edit2 className="h-3.5 w-3.5" />} label="Edit product" />
                     </Link>
@@ -156,6 +163,12 @@ export default function ProductsPage() {
         loading={archive.isPending}
         onClose={() => setPendingArchive(null)}
         onConfirm={() => pendingArchive && archive.mutate(pendingArchive.id)}
+      />
+      <BarcodePrintDialog
+        open={printLabels !== null}
+        onClose={() => setPrintLabels(null)}
+        title={printLabels?.title ?? "Print barcode labels"}
+        labels={printLabels?.labels ?? []}
       />
     </AppShell>
   );
