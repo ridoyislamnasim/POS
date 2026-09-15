@@ -7,7 +7,7 @@ import { usePOSStore, type DiscountType } from "@/lib/pos-store";
 import { dict } from "@/lib/i18n";
 import { AppShell } from "@/components/app-shell";
 import { useMe } from "@/lib/auth";
-import { Modal, btnGhost, btnPrimary, inputClass, EmptyState } from "@/components/ui";
+import { Modal, btnGhost, btnPrimary, inputClass, EmptyState, ActionTooltip } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PosCustomerPicker } from "@/components/pos/pos-customer-picker";
 import { DocumentActions } from "@/components/documents/document-actions";
@@ -306,14 +306,16 @@ const cartParts = useMemo(() => {
           />
           <div className="flex items-center justify-between gap-1">
             <span className="truncate text-xs font-medium leading-tight">{l.name}</span>
-            <button
-              type="button"
-              aria-label={`Remove ${l.name}`}
-              className={`flex shrink-0 items-center justify-center rounded-full text-muted-foreground/60 transition-all duration-150 hover:scale-110 hover:bg-red-500/10 hover:text-red-500 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-red-400 ${rmCls}`}
-              onClick={() => store.remove(l.variantId)}
-            >
-              ×
-            </button>
+            <ActionTooltip label={`Remove ${l.name}`} variant="destructive" side="top">
+              <button
+                type="button"
+                aria-label={`Remove ${l.name}`}
+                className={`flex shrink-0 items-center justify-center rounded-full text-muted-foreground/60 transition-all duration-150 hover:scale-110 hover:bg-red-500/10 hover:text-red-500 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-red-400 ${rmCls}`}
+                onClick={() => store.remove(l.variantId)}
+              >
+                ×
+              </button>
+            </ActionTooltip>
           </div>
           <div className="flex items-center gap-1 pl-1 text-[10px] leading-tight text-muted-foreground">
             <span className="truncate">{l.variantLabel || l.sku}</span>
@@ -321,23 +323,27 @@ const cartParts = useMemo(() => {
             <span className="ml-auto hidden shrink-0 tabular-nums sm:inline">{moneyLabel(Number(l.unitPrice))}/ea</span>
           </div>
           <div className="flex items-center gap-1.5 pl-1">
-            <button
-              type="button"
-              aria-label={`Decrease qty for ${l.name}`}
-              className={`rounded-full bg-primary/5 text-muted-foreground transition-all duration-150 hover:scale-105 hover:bg-primary/15 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${qtyCls}`}
-              onClick={() => store.setQty(l.variantId, l.qty - 1)}
-            >
-              −
-            </button>
+            <ActionTooltip label={`Decrease quantity for ${l.name}`} side="top">
+              <button
+                type="button"
+                aria-label={`Decrease qty for ${l.name}`}
+                className={`rounded-full bg-primary/5 text-muted-foreground transition-all duration-150 hover:scale-105 hover:bg-primary/15 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${qtyCls}`}
+                onClick={() => store.setQty(l.variantId, l.qty - 1)}
+              >
+                −
+              </button>
+            </ActionTooltip>
             <span className={`text-center text-sm font-semibold tabular-nums ${touch ? "w-9" : "w-8"}`}>{l.qty}</span>
-            <button
-              type="button"
-              aria-label={`Increase qty for ${l.name}`}
-              className={`rounded-full bg-primary/5 text-muted-foreground transition-all duration-150 hover:scale-105 hover:bg-primary/15 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${qtyCls}`}
-              onClick={() => store.setQty(l.variantId, l.qty + 1)}
-            >
-              +
-            </button>
+            <ActionTooltip label={`Increase quantity for ${l.name}`} side="top">
+              <button
+                type="button"
+                aria-label={`Increase qty for ${l.name}`}
+                className={`rounded-full bg-primary/5 text-muted-foreground transition-all duration-150 hover:scale-105 hover:bg-primary/15 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${qtyCls}`}
+                onClick={() => store.setQty(l.variantId, l.qty + 1)}
+              >
+                +
+              </button>
+            </ActionTooltip>
             <span className="ml-auto flex items-baseline gap-1 tabular-nums transition-colors duration-200">
               {hasDisc ? (
                 <>

@@ -23,6 +23,7 @@ for (const g of NAV_GROUPS) {
 
 export const GROUP_BLURBS: Record<string, string> = {
   Overview: "Today’s sales, stock, and till mix.",
+  Billing: "Your plan, platform bills, and receipts.",
   Sell: "Checkout, tickets, returns, and orders.",
   "Sales & Finance": "Buy stock, pay bills, dues, and close the day.",
   "Customer & Supplier": "People you sell to and buy from.",
@@ -510,6 +511,14 @@ const DRAFTS: Draft[] = [
     blurb: "Plan, feature limits, current usage, and bills from the platform.",
     canDo: ["See the plan and limits", "Download a platform invoice"],
     keywords: ["billing", "plan", "invoice"],
+  },
+  {
+    href: "/billing",
+    blurb: "Your plan price, discount, platform bills, and payment receipts.",
+    canDo: ["See unpaid bills", "Download an invoice or receipt"],
+    next: [{ href: "/subscription", label: "Subscription", permission: "plan.manage" }],
+    emptyHint: "Bills from the platform appear here every month.",
+    keywords: ["billing", "bill", "invoice", "payment", "receipt", "due"],
   },
   {
     href: "/integrations",

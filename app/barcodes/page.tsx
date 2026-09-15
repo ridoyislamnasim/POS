@@ -1,13 +1,14 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { usePagedRows } from "@/lib/use-pagination";
 import { printBarcodeLabels } from "@/lib/print-barcodes";
 import { AppShell } from "@/components/app-shell";
-import { Button, DataTable, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, inputClass } from "@/components/ui";
+import { Button, DataTable, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TablePagination, TableRow, inputClass, IconActionButton } from "@/components/ui";
 import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
+import { Printer } from "lucide-react";
 
 type Code = { code: string; kind: string; sku: string; label: string };
 
@@ -19,13 +20,13 @@ export default function BarcodesPage() {
   const [size, setSize] = useState<"small" | "standard" | "shelf">("standard");
   const [codes, setCodes] = useState<Code[]>([]);
   const { rows, pager } = usePagedRows(codes);
-  const gen = useMutation({
+  const gen = useMutation<Code[], Error, void>({
     mutationFn: () => api<Code[]>(`/api/v1/extras/barcodes/generate?sku=${encodeURIComponent(sku)}&kind=${kind}&count=${count}`),
-    onSuccess: (rows) => {
+    onSuccess: (rows: Code[]) => {
       setCodes(rows);
       toastSuccess(`Generated ${rows.length} barcodes`);
     },
-    onError: (e) => toastError(e, "Generate failed"),
+    onError: (e: Error) => toastError(e, "Generate failed"),
   });
 
   function print(list: Code[]) {
@@ -49,13 +50,13 @@ export default function BarcodesPage() {
           <option value="CODE128">CODE128</option>
           <option value="EAN13">EAN13</option>
         </select>
-        <input className={inputClass + " w-20"} type="number" min="1" max="50" value={count} onChange={(e) => setCount(e.target.value)} title="How many codes" />
+        <input className={inputClass + " w-20"} type="number" min="1" max="50" value={count} onChange={(e) => setCount(e.target.value)} aria-label="How many codes" placeholder="Count" />
         <select className={inputClass} value={size} onChange={(e) => setSize(e.target.value as typeof size)}>
           <option value="small">Small 38×25mm</option>
           <option value="standard">Standard 50×30mm</option>
           <option value="shelf">Shelf 70×40mm</option>
         </select>
-        <input className={inputClass + " w-24"} type="number" min="1" max="50" value={copies} onChange={(e) => setCopies(e.target.value)} title="Copies per code" placeholder="Copies" />
+        <input className={inputClass + " w-24"} type="number" min="1" max="50" value={copies} onChange={(e) => setCopies(e.target.value)} aria-label="Copies per code" placeholder="Copies" />
         <Button onClick={() => gen.mutate()}>Generate</Button>
       </div>
       <DataTable>
@@ -75,9 +76,7 @@ export default function BarcodesPage() {
                 <TableCell>{r.kind}</TableCell>
                 <TableCell>{r.sku}</TableCell>
                 <TableCell>
-                  <Button size="sm" variant="outline" onClick={() => print([r])}>
-                    Print
-                  </Button>
+                  <IconActionButton icon={<Printer className="h-3.5 w-3.5" />} label="Print barcode label" onClick={() => print([r])} />
                 </TableCell>
               </TableRow>
             ))}

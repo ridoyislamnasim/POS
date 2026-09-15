@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { sidebarHover } from "@/lib/sidebar-layout";
 
@@ -21,6 +21,7 @@ export function SidebarTooltip({ label, description, toneClass, disabled, childr
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const timer = useRef<number | null>(null);
+  const reduced = useReducedMotion();
 
   function place() {
     const el = triggerRef.current;
@@ -36,8 +37,9 @@ export function SidebarTooltip({ label, description, toneClass, disabled, childr
 
   function show() {
     if (disabled) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(hover: none)").matches) return;
     if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setOpen(true), 80);
+    timer.current = window.setTimeout(() => setOpen(true), 120);
   }
 
   function hide() {
@@ -82,15 +84,15 @@ export function SidebarTooltip({ label, description, toneClass, disabled, childr
                   key="sidebar-tooltip"
                   ref={tipRef}
                   role="tooltip"
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -4 }}
-                  transition={sidebarHover}
+                  initial={reduced ? false : { opacity: 0, x: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={reduced ? { opacity: 0 } : { opacity: 0, x: -4, scale: 0.98 }}
+                  transition={reduced ? { duration: 0 } : sidebarHover}
                   style={{ top: coords.top, left: coords.left }}
                   onMouseEnter={show}
                   onMouseLeave={hide}
                   className={cn(
-                    "pointer-events-auto fixed z-[80] min-w-[160px] max-w-[228px] rounded-lg border border-white/20 p-0 text-white shadow-xl",
+                    "pointer-events-auto fixed z-[80] min-w-[160px] max-w-[228px] rounded-lg border border-white/20 p-0 text-white shadow-xl backdrop-blur-sm",
                     "bg-gradient-to-br",
                     toneClass,
                   )}

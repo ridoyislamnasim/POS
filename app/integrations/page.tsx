@@ -7,8 +7,9 @@ import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
-import { Button, DataTable, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, Badge, tableCellActions } from "@/components/ui";
+import { Button, DataTable, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, Badge, tableCellActions, IconActionButton } from "@/components/ui";
 import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
+import { X } from "lucide-react";
 
 type Key = { id: string; name: string; keyPrefix: string; revokedAt?: string; createdAt: string; secret?: string };
 
@@ -75,9 +76,7 @@ export default function IntegrationsPage() {
                 <TableCell>{k.revokedAt ? <Badge variant="secondary">Revoked</Badge> : <Badge variant="success">Active</Badge>}</TableCell>
                 <TableCell className={tableCellActions}>
                   {!k.revokedAt ? (
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setPending(k)}>
-                      Revoke
-                    </Button>
+                    <IconActionButton icon={<X className="h-3.5 w-3.5" />} label="Revoke API key" variant="destructive" onClick={() => setPending(k)} />
                   ) : null}
                 </TableCell>
               </TableRow>

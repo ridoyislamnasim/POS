@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -37,10 +37,9 @@ type Feature = {
 type Props = {
   planId: string;
   features: Feature[];
-  onClose: () => void;
 };
 
-export function FeatureToggle({ planId, features, onClose }: Props) {
+export function FeatureToggle({ planId, features }: Props) {
   const qc = useQueryClient();
   const [localFeatures, setLocalFeatures] = useState<Record<string, boolean>>(() => {
     const map: Record<string, boolean> = {};
@@ -50,6 +49,19 @@ export function FeatureToggle({ planId, features, onClose }: Props) {
     }
     return map;
   });
+
+  useEffect(() => {
+    setLocalFeatures((prev) => {
+      const next = { ...prev };
+      for (const f of FEATURES) {
+        const existing = features.find((ef) => ef.feature === f.key);
+        if (existing) {
+          next[f.key] = existing.enabled;
+        }
+      }
+      return next;
+    });
+  }, [features]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -62,7 +74,6 @@ export function FeatureToggle({ planId, features, onClose }: Props) {
     onSuccess: () => {
       toastSuccess("Features saved");
       qc.invalidateQueries({ queryKey: ["platform-plans"] });
-      onClose();
     },
     onError: (e) => toastError(e, "Could not save features"),
   });
@@ -90,7 +101,6 @@ export function FeatureToggle({ planId, features, onClose }: Props) {
         </div>
       ))}
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
         <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
           {save.isPending ? "Saving..." : "Save Changes"}
         </Button>

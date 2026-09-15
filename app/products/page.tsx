@@ -22,10 +22,12 @@ import {
   tableCellNumeric,
   tableSubText,
   btnPrimary,
+  IconActionButton,
 } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { printBarcodeLabels } from "@/lib/print-barcodes";
 import { toastError, toastSuccess, toastWarn } from "@/lib/toast";
+import { Archive, Edit2, Printer } from "lucide-react";
 
 type Product = {
   id: string;
@@ -115,32 +117,24 @@ export default function ProductsPage() {
                     <StatusBadge value={p.status} />
                   </TableCell>
                   <TableCell className={tableCellActions}>
-                    <button
-                      type="button"
-                      className="mr-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
-                      onClick={() => {
-                        const labels = p.variants.flatMap((v) => {
-                          const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
-                          return codes.map((code) => ({
-                            code,
-                            sku: v.sku,
-                            name: p.name,
-                            price: Number(v.price).toFixed(2),
-                            kind: "CODE128",
-                          }));
-                        });
-                        if (!printBarcodeLabels(labels)) toastWarn("Allow pop-ups to print barcode labels");
-                      }}
-                    >
-                      Print
-                    </button>
-                    <Link href={`/products/${p.id}`} className="mr-1 text-xs font-medium text-primary underline-offset-2 hover:underline">
-                      Edit
+                    <IconActionButton icon={<Printer className="h-3.5 w-3.5" />} label="Print barcode labels" onClick={() => {
+                      const labels = p.variants.flatMap((v) => {
+                        const codes = v.barcodes.length ? v.barcodes.map((b) => b.code) : [v.sku];
+                        return codes.map((code) => ({
+                          code,
+                          sku: v.sku,
+                          name: p.name,
+                          price: Number(v.price).toFixed(2),
+                          kind: "CODE128",
+                        }));
+                      });
+                      if (!printBarcodeLabels(labels)) toastWarn("Allow pop-ups to print barcode labels");
+                    }} />
+                    <Link href={`/products/${p.id}`} className="mr-1">
+                      <IconActionButton icon={<Edit2 className="h-3.5 w-3.5" />} label="Edit product" />
                     </Link>
                     {p.status !== "ARCHIVED" ? (
-                      <Button type="button" variant="outline" size="sm" onClick={() => setPendingArchive(p)}>
-                        Archive
-                      </Button>
+                      <IconActionButton icon={<Archive className="h-3.5 w-3.5" />} label="Archive product" variant="warning" onClick={() => setPendingArchive(p)} />
                     ) : null}
                   </TableCell>
                 </TableRow>

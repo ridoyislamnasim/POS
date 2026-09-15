@@ -35,6 +35,7 @@ import {
   FilterChips,
   StatusBadge,
   SummaryCards,
+  IconActionButton,
   type SummaryItem,
 } from "@/components/ui";
 import { toastCreated, toastDeleted, toastError, toastUpdated } from "@/lib/toast";
@@ -285,16 +286,10 @@ export function ResourcePage<T extends { id: string } = any>({
                       </Link>
                     ) : null}
                     {allowEdit ? (
-                      <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(row)}>
-                        <Pencil className="mr-1 h-3.5 w-3.5" />
-                        Edit
-                      </Button>
+                      <IconActionButton icon={<Pencil className="h-3.5 w-3.5" />} label="Edit" onClick={() => openEdit(row)} />
                     ) : null}
                     {allowDelete ? (
-                      <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setPendingDelete(row)}>
-                        <Trash2 className="mr-1 h-3.5 w-3.5" />
-                        Delete
-                      </Button>
+                      <IconActionButton icon={<Trash2 className="h-3.5 w-3.5" />} label="Delete" variant="destructive" onClick={() => setPendingDelete(row)} />
                     ) : null}
                   </TableCell>
                 ) : null}

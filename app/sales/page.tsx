@@ -22,10 +22,12 @@ import {
   tableCellActions,
   tableCellNumeric,
   tableSubText,
+  IconActionButton,
 } from "@/components/ui";
 import { DocumentActions } from "@/components/documents/document-actions";
 import { SendSmsButton } from "@/components/sms/send-sms-dialog";
 import { moneyText, sumField } from "@/components/erp-page";
+import { ArrowRight } from "lucide-react";
 
 type Sale = {
   id: string;
@@ -112,28 +114,26 @@ export default function SalesPage() {
                 <TableCell className={tableCellNumeric}>
                   {s.currency} {Number(s.total).toFixed(2)}
                 </TableCell>
-                <TableCell className={tableCellActions}>
-                  <div className="btn-group inline-flex flex-wrap justify-end gap-0.5">
-                    <Button variant="outline" size="xs" onClick={() => router.push(`/sales/${s.id}`)}>
-                      Open
-                    </Button>
-                    <DocumentActions type="sale" id={s.id} number={s.invoiceNumber} />
-                    {s.customer ? (
-                      <SendSmsButton
-                        target={{
-                          recipientType: "CUSTOMER",
-                          recipientId: s.customer.id,
-                          phone: s.customer.phone,
-                          name: s.customer.name,
-                          referenceType: "Sale",
-                          referenceId: s.id,
-                          templateKey: "SALE_CONFIRMATION",
-                          vars: { invoiceNo: s.invoiceNumber, amount: s.total, dueAmount: s.due, paidAmount: s.paid },
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                </TableCell>
+                  <TableCell className={tableCellActions}>
+                    <div className="btn-group inline-flex flex-wrap justify-end gap-0.5">
+                      <IconActionButton icon={<ArrowRight className="h-3.5 w-3.5" />} label="Open invoice" onClick={() => router.push(`/sales/${s.id}`)} />
+                      <DocumentActions type="sale" id={s.id} number={s.invoiceNumber} />
+                      {s.customer ? (
+                        <SendSmsButton
+                          target={{
+                            recipientType: "CUSTOMER",
+                            recipientId: s.customer.id,
+                            phone: s.customer.phone,
+                            name: s.customer.name,
+                            referenceType: "Sale",
+                            referenceId: s.id,
+                            templateKey: "SALE_CONFIRMATION",
+                            vars: { invoiceNo: s.invoiceNumber, amount: s.total, dueAmount: s.due, paidAmount: s.paid },
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  </TableCell>
               </TableRow>
             ))}
           </TableBody>

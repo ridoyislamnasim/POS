@@ -7,7 +7,7 @@ import { Mail, MailOpen } from "lucide-react";
 import { api, apiList } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Badge, FilterSelect, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui";
+import { ActionTooltip, Badge, FilterSelect, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui";
 import { usePagedRows } from "@/lib/use-pagination";
 import { cn } from "@/lib/cn";
 
@@ -308,21 +308,24 @@ export default function AuditPage() {
                 <TableCell>
                   <div className="flex items-center gap-1.5">
                     <Badge variant={statusVariant(n.status)}>{n.status}</Badge>
-                    <span
-                      className={cn(
-                        "inline-flex items-center justify-center rounded p-1",
-                        n.isRead
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                      )}
-                      title={n.isRead ? "Read" : "Unread"}
-                    >
-                      {n.isRead ? <MailOpen className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-                    </span>
+                    <ActionTooltip label={n.isRead ? "Read" : "Unread"} description={n.isRead ? "This alert has been seen" : "Needs attention"} variant={n.isRead ? "success" : "warning"} side="top">
+                      <span
+                        className={cn(
+                          "inline-flex items-center justify-center rounded p-1",
+                          n.isRead
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                        )}
+                      >
+                        {n.isRead ? <MailOpen className="h-3.5 w-3.5" aria-hidden /> : <Mail className="h-3.5 w-3.5" aria-hidden />}
+                      </span>
+                    </ActionTooltip>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span title={new Date(n.createdAt).toLocaleString()}>{relativeTime(n.createdAt)}</span>
+                  <ActionTooltip label={new Date(n.createdAt).toLocaleString()} side="top">
+                    <span className="whitespace-nowrap">{relativeTime(n.createdAt)}</span>
+                  </ActionTooltip>
                 </TableCell>
               </TableRow>
             ))}

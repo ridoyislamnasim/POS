@@ -1,11 +1,12 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Loader2, Search, SlidersHorizontal, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { tableToolbarInputClass } from "@/components/ui/data-table";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 export function SearchInput({
   value,
@@ -122,9 +123,11 @@ export function FilterPopover({
           >
             <div className="mb-2 flex items-center justify-between text-xs font-medium">
               Filters
-              <button type="button" className="text-muted-foreground" onClick={() => setOpen(false)} aria-label="Close">
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <ActionTooltip label="Close filters" side="top">
+                <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setOpen(false)} aria-label="Close filters">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </ActionTooltip>
             </div>
             <div className="grid gap-2">{children}</div>
           </motion.div>
@@ -147,15 +150,17 @@ export function FilterChips({
   return (
     <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5 sm:px-3">
       {chips.map((c) => (
-        <button
-          key={c.key}
-          type="button"
-          className="inline-flex items-center gap-1 rounded-full border bg-amber-50/70 px-2 py-0.5 text-[11px] hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-950/70"
-          onClick={() => onRemove(c.key)}
-        >
-          <span className="text-muted-foreground">{c.label}:</span> {c.value}
-          <X className="h-3 w-3" />
-        </button>
+        <ActionTooltip key={c.key} label={`Remove ${c.label} filter`} description={String(c.value)}>
+          <button
+            type="button"
+            aria-label={`Remove ${c.label} filter: ${c.value}`}
+            className="inline-flex items-center gap-1 rounded-full border bg-amber-50/70 px-2 py-0.5 text-[11px] hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-amber-950/40 dark:hover:bg-amber-950/70"
+            onClick={() => onRemove(c.key)}
+          >
+            <span className="text-muted-foreground">{c.label}:</span> {c.value}
+            <X className="h-3 w-3" aria-hidden />
+          </button>
+        </ActionTooltip>
       ))}
       <button type="button" className="text-[11px] text-muted-foreground underline-offset-2 hover:underline" onClick={onClear}>
         Clear all
@@ -166,9 +171,35 @@ export function FilterChips({
 
 export function Truncate({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
   const text = title ?? (typeof children === "string" ? children : undefined);
-  return (
-    <span className={cn("block max-w-[220px] truncate", className)} title={text}>
+  const ref = useRef<HTMLSpanElement>(null);
+  const [truncated, setTruncated] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !text) {
+      setTruncated(false);
+      return;
+    }
+    const check = () => setTruncated(el.scrollWidth > el.clientWidth + 1);
+    check();
+    window.addEventListener("resize", check);
+    // Re-check after fonts/layout settle.
+    const t = window.setTimeout(check, 100);
+    return () => {
+      window.removeEventListener("resize", check);
+      window.clearTimeout(t);
+    };
+  }, [text, children]);
+
+  const span = (
+    <span ref={ref} className={cn("block max-w-[220px] truncate", className)}>
       {children}
     </span>
+  );
+  if (!text || !truncated) return span;
+  return (
+    <ActionTooltip label={text} side="top">
+      {span}
+    </ActionTooltip>
   );
 }

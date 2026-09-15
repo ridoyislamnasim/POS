@@ -11,12 +11,13 @@ import { useServerList } from "@/lib/use-list-state";
 import { useVariantOptions } from "@/lib/lookups";
 import { AppShell } from "@/components/app-shell";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Button, Dialog, Field, FilterSelect, PageHeader, StatusBadge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellNumeric } from "@/components/ui";
+import { Button, Dialog, Field, FilterSelect, PageHeader, StatusBadge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellNumeric, IconActionButton } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
 import { moneyCell } from "@/components/erp-page";
 import { DAMAGE_REASONS, newIdempotencyKey } from "@/lib/stock-workflow";
 import { useHelpCreateAction } from "@/lib/help";
+import { Check, X, Send } from "lucide-react";
 
 type Row = {
   id: string;
@@ -162,12 +163,12 @@ export default function DamagePage() {
                   <TableCell><StatusBadge value={r.status} /></TableCell>
                   <TableCell className="space-x-2">
                     {r.status === "DRAFT" && can("inventory.damage.create") ? (
-                      <Button size="sm" variant="outline" onClick={() => setPending({ id: r.id, action: "submit" })}>Submit</Button>
+                      <IconActionButton icon={<Send className="h-3.5 w-3.5" />} label="Submit damage report" onClick={() => setPending({ id: r.id, action: "submit" })} />
                     ) : null}
                     {r.status === "SUBMITTED" && (can("inventory.damage.approve") || can("inventory.adjust")) ? (
                       <>
-                        <Button size="sm" onClick={() => setPending({ id: r.id, action: "approve" })}>Approve</Button>
-                        <Button size="sm" variant="outline" onClick={() => setPending({ id: r.id, action: "reject" })}>Reject</Button>
+                        <IconActionButton icon={<Check className="h-3.5 w-3.5" />} label="Approve and adjust stock" variant="success" onClick={() => setPending({ id: r.id, action: "approve" })} />
+                        <IconActionButton icon={<X className="h-3.5 w-3.5" />} label="Reject report" variant="destructive" onClick={() => setPending({ id: r.id, action: "reject" })} />
                       </>
                     ) : null}
                   </TableCell>

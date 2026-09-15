@@ -2,6 +2,7 @@
 
 import { Check, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { cn } from "@/lib/cn";
 
 type Feature = {
@@ -28,9 +29,17 @@ export function FeatureAccessGrid({ features, onRequestAccess }: Props) {
           )}
         >
           {f.enabled ? (
-            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <ActionTooltip label="Available" description={f.source} side="top" variant="success">
+              <span className="inline-flex">
+                <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+              </span>
+            </ActionTooltip>
           ) : (
-            <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <ActionTooltip label="Locked" description={f.source || "Not in your plan"} side="top">
+              <span className="inline-flex">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              </span>
+            </ActionTooltip>
           )}
           <span className={cn("flex-1 truncate", !f.enabled && "text-muted-foreground")}>{f.label}</span>
           {!f.enabled && onRequestAccess && (

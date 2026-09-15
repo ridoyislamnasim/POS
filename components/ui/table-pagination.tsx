@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-r
 import { cn } from "@/lib/cn";
 import { PAGE_SIZE_OPTIONS, type Pager } from "@/lib/use-pagination";
 import { Button } from "@/components/ui/button";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 function pageWindow(page: number, pageCount: number) {
   const span = 2;
@@ -62,12 +63,16 @@ export function TablePagination({
           </select>
         </label>
         <div className="flex items-center gap-0.5">
-          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canPrev} onClick={() => setPage(1)} aria-label="First page">
-            <ChevronsLeft className="h-3.5 w-3.5" />
-          </Button>
-          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canPrev} onClick={() => setPage(page - 1)} aria-label="Previous page">
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Button>
+          <ActionTooltip label="First page" side="top">
+            <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canPrev} onClick={() => setPage(1)} aria-label="First page">
+              <ChevronsLeft className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </ActionTooltip>
+          <ActionTooltip label="Previous page" side="top">
+            <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canPrev} onClick={() => setPage(page - 1)} aria-label="Previous page">
+              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </ActionTooltip>
           {pages[0] > 1 ? <span className="px-0.5 text-[10px] text-muted-foreground">…</span> : null}
           {pages.map((n) => (
             <Button
@@ -84,12 +89,16 @@ export function TablePagination({
             </Button>
           ))}
           {pages[pages.length - 1] < pageCount ? <span className="px-0.5 text-[10px] text-muted-foreground">…</span> : null}
-          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canNext} onClick={() => setPage(page + 1)} aria-label="Next page">
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-          <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canNext} onClick={() => setPage(pageCount)} aria-label="Last page">
-            <ChevronsRight className="h-3.5 w-3.5" />
-          </Button>
+          <ActionTooltip label="Next page" side="top">
+            <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canNext} onClick={() => setPage(page + 1)} aria-label="Next page">
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </ActionTooltip>
+          <ActionTooltip label="Last page" side="top">
+            <Button type="button" variant="outline" size="icon" className="h-7 w-7" disabled={!canNext} onClick={() => setPage(pageCount)} aria-label="Last page">
+              <ChevronsRight className="h-3.5 w-3.5" aria-hidden />
+            </Button>
+          </ActionTooltip>
         </div>
       </div>
     </div>

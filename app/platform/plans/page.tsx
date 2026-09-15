@@ -3,37 +3,68 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Layers, Plus, Settings, ToggleLeft } from "lucide-react";
+import { Layers, Plus, Settings } from "lucide-react";
 import { api } from "@/lib/api";
 import { useMe } from "@/lib/auth";
 import { AppShell } from "@/components/app-shell";
-import { PageHeader, Badge, Button, Panel } from "@/components/ui";
+import { PageHeader, Badge, Button, Panel, IconActionButton } from "@/components/ui";
 import { CreatePlanDialog } from "@/components/plan/create-plan-dialog";
 
-type Plan = {
+type ComparisonPlan = {
   id: string;
   code: string;
   name: string;
-  description?: string;
   price: string;
   interval: string;
-  active: boolean;
-  displayOrder: number;
-  planLimits: { resource: string; limitValue: number | null; unlimited: boolean; disabled: boolean }[];
-  planFeatures: { feature: string; enabled: boolean }[];
+  limits: Record<string, { limitValue: number | null; unlimited: boolean; disabled: boolean }>;
+  features: Record<string, boolean>;
 };
+
+const RESOURCES = [
+  { key: "BRANCH", label: "Branches" },
+  { key: "WAREHOUSE", label: "Warehouses" },
+  { key: "USER", label: "Users" },
+  { key: "PRODUCT", label: "Products" },
+  { key: "CUSTOMER", label: "Customers" },
+  { key: "SUPPLIER", label: "Suppliers" },
+  { key: "MONTHLY_SALE", label: "Monthly Sales" },
+  { key: "MONTHLY_PURCHASE_ORDER", label: "Monthly Purchase Orders" },
+];
+
+const FEATURES = [
+  { key: "POS", label: "POS" },
+  { key: "INVENTORY", label: "Inventory" },
+  { key: "CUSTOMERS", label: "Customers" },
+  { key: "SUPPLIERS", label: "Suppliers" },
+  { key: "PURCHASES", label: "Purchases" },
+  { key: "SALES", label: "Sales" },
+  { key: "RETURNS", label: "Returns" },
+  { key: "BASIC_REPORTS", label: "Basic Reports" },
+  { key: "MULTI_BRANCH", label: "Multi Branch" },
+  { key: "MULTI_WAREHOUSE", label: "Multi Warehouse" },
+  { key: "LOYALTY", label: "Loyalty" },
+  { key: "ECOMMERCE", label: "E-commerce" },
+  { key: "ADVANCED_REPORTS", label: "Advanced Reports" },
+  { key: "ANALYTICS", label: "Analytics" },
+  { key: "WHATSAPP", label: "WhatsApp" },
+  { key: "ADVANCED_ROLES", label: "Advanced Roles" },
+  { key: "API", label: "API" },
+  { key: "INTEGRATIONS", label: "Integrations" },
+  { key: "AUDIT_LOGS", label: "Audit Logs" },
+  { key: "PRIORITY_SUPPORT", label: "Priority Support" },
+];
 
 export default function PlatformPlansPage() {
   const { me } = useMe();
   const [createOpen, setCreateOpen] = useState(false);
 
   const plans = useQuery({
-    queryKey: ["platform-plans"],
-    queryFn: () => api<Plan[]>("/api/v1/platform/plans"),
+    queryKey: ["platform-plans-comparison"],
+    queryFn: () => api<ComparisonPlan[]>("/api/v1/platform/plans/comparison"),
     enabled: Boolean(me?.isPlatform),
   });
 
-  const keyLimits = ["BRANCH", "WAREHOUSE", "USER", "PRODUCT", "CUSTOMER", "SUPPLIER"];
+  const data = plans.data ?? [];
 
   return (
     <AppShell>
@@ -44,59 +75,77 @@ export default function PlatformPlansPage() {
         </Button>
       </PageHeader>
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {(plans.data ?? []).map((plan) => (
-          <Panel key={plan.id} className="relative">
-            <div className="mb-3 flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">{plan.name}</h3>
-                <p className="text-xs text-muted-foreground">{plan.code}</p>
-              </div>
-              <Badge variant={plan.active ? "default" : "secondary"}>
-                {plan.active ? "Active" : "Inactive"}
-              </Badge>
-            </div>
-            <div className="mb-3 text-2xl font-bold">
-              ৳ {Number(plan.price).toLocaleString()}
-              <span className="text-sm font-normal text-muted-foreground">
-                /{plan.interval === "YEARLY" ? "yr" : "mo"}
-              </span>
-            </div>
-            {plan.description && (
-              <p className="mb-3 text-xs text-muted-foreground">{plan.description}</p>
-            )}
-            <div className="mb-3 space-y-1">
-              {keyLimits.map((r) => {
-                const limit = plan.planLimits.find((l) => l.resource === r);
-                if (!limit) return null;
-                const label = { BRANCH: "Branches", WAREHOUSE: "Warehouses", USER: "Users", PRODUCT: "Products", CUSTOMER: "Customers", SUPPLIER: "Suppliers" }[r] ?? r;
-                return (
-                  <div key={r} className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{label}</span>
-                    <span className="font-medium">
-                      {limit.unlimited ? "∞" : limit.disabled ? "—" : limit.limitValue?.toLocaleString()}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-2">
-              <Link href={`/platform/plans/${plan.id}`}>
-                <Button variant="outline" size="sm" className="h-7 text-xs">
-                  <Settings className="mr-1 h-3 w-3" />
-                  Manage
-                </Button>
-              </Link>
-              <Link href="/platform/plans/comparison">
-                <Button variant="ghost" size="sm" className="h-7 text-xs">
-                  <ToggleLeft className="mr-1 h-3 w-3" />
-                  Compare
-                </Button>
-              </Link>
-            </div>
-          </Panel>
-        ))}
-      </div>
+      <Panel>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs font-medium text-muted-foreground">
+                <th className="pb-2 pr-4 sticky left-0 bg-card min-w-[160px]">Resource / Feature</th>
+                {data.map((p) => (
+                  <th key={p.id} className="pb-2 px-4 text-center min-w-[120px]">
+                    <div className="font-semibold text-foreground">{p.name}</div>
+                    <div className="text-muted-foreground font-normal">
+                      ৳{Number(p.price).toLocaleString()}/{p.interval === "YEARLY" ? "yr" : "mo"}
+                    </div>
+                      <Link href={`/platform/plans/${p.id}`} className="mt-1 inline-block">
+                        <IconActionButton icon={<Settings className="h-3.5 w-3.5" />} label="Manage plan" size="xs" />
+                      </Link>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={data.length + 1} className="pt-3 pb-1 text-xs font-semibold uppercase text-muted-foreground">
+                  Resource Limits
+                </td>
+              </tr>
+              {RESOURCES.map((r) => (
+                <tr key={r.key} className="border-b last:border-0">
+                  <td className="py-2 pr-4 font-medium sticky left-0 bg-card">{r.label}</td>
+                  {data.map((p) => {
+                    const l = p.limits[r.key];
+                    return (
+                      <td key={p.id} className="py-2 px-4 text-center">
+                        {l ? (
+                          l.unlimited ? (
+                            <Badge variant="outline">∞</Badge>
+                          ) : l.disabled ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <span className="font-medium">{l.limitValue?.toLocaleString()}</span>
+                          )
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              <tr>
+                <td colSpan={data.length + 1} className="pt-4 pb-1 text-xs font-semibold uppercase text-muted-foreground">
+                  Features
+                </td>
+              </tr>
+              {FEATURES.map((f) => (
+                <tr key={f.key} className="border-b last:border-0">
+                  <td className="py-2 pr-4 font-medium sticky left-0 bg-card">{f.label}</td>
+                  {data.map((p) => (
+                    <td key={p.id} className="py-2 px-4 text-center">
+                      {p.features[f.key] ? (
+                        <span className="text-emerald-600 font-medium">✓</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
 
       <CreatePlanDialog open={createOpen} onClose={() => setCreateOpen(false)} />
     </AppShell>

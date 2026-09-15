@@ -29,10 +29,13 @@ import {
   TableTabs,
   inputClass,
   tableSubText,
+  IconActionButton,
+  ActionTooltip,
 } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { toastError, toastSuccess, toastUpdated } from "@/lib/toast";
 import { SendSmsDialog, type SendSmsTarget } from "@/components/sms/send-sms-dialog";
+import { Pencil, RotateCcw, RefreshCw } from "lucide-react";
 
 type Dashboard = {
   access: { shopEnabled: boolean; platformEnabled: boolean; autoSendEnabled: boolean; reason: string | null };
@@ -316,18 +319,20 @@ function TemplatesPanel({ rows, onSaved, canEdit }: { rows: Template[]; onSaved:
                 </TableCell>
                 <TableCell>{t.recipientType}</TableCell>
                 <TableCell>
-                  <button type="button" disabled={!canEdit || toggle.isPending} onClick={() => canEdit && toggle.mutate(t)}>
-                    <Badge variant={t.enabled ? "success" : "secondary"}>{t.enabled ? "On" : "Off"}</Badge>
-                  </button>
+                  <ActionTooltip label={t.enabled ? "Template enabled" : "Template disabled"} description="Click to toggle" side="top" variant={t.enabled ? "success" : "default"}>
+                    <button type="button" disabled={!canEdit || toggle.isPending} onClick={() => canEdit && toggle.mutate(t)} aria-label={`${t.name}: ${t.enabled ? "enabled, activate to disable" : "disabled, activate to enable"}`} className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <Badge variant={t.enabled ? "success" : "secondary"}>{t.enabled ? "On" : "Off"}</Badge>
+                    </button>
+                  </ActionTooltip>
                 </TableCell>
-                <TableCell className="space-x-1 text-right">
-                  {canEdit ? (
-                    <>
-                      <Button size="xs" variant="outline" onClick={() => setEdit(t)}>Edit</Button>
-                      <Button size="xs" variant="ghost" onClick={() => reset.mutate(t.id)}>Reset</Button>
-                    </>
-                  ) : null}
-                </TableCell>
+                  <TableCell className="space-x-1 text-right">
+                    {canEdit ? (
+                      <>
+                        <IconActionButton icon={<Pencil className="h-3.5 w-3.5" />} label="Edit template" size="xs" onClick={() => setEdit(t)} />
+                        <IconActionButton icon={<RotateCcw className="h-3.5 w-3.5" />} label="Reset template" variant="destructive" size="xs" onClick={() => reset.mutate(t.id)} />
+                      </>
+                    ) : null}
+                  </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -425,9 +430,9 @@ function LogsPanel({ list, canRetry }: { list: ReturnType<typeof useServerList<L
               </TableCell>
               <TableCell className="text-xs">{new Date(r.sentAt ?? r.createdAt).toLocaleString()}</TableCell>
               <TableCell>
-                {canRetry && r.status === "FAILED" ? (
-                  <Button size="xs" variant="outline" onClick={() => retry.mutate(r.id)}>Retry</Button>
-                ) : null}
+                  {canRetry && r.status === "FAILED" ? (
+                    <IconActionButton icon={<RefreshCw className="h-3.5 w-3.5" />} label="Retry sending" variant="warning" size="xs" onClick={() => retry.mutate(r.id)} />
+                  ) : null}
               </TableCell>
             </TableRow>
           ))}

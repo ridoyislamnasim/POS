@@ -24,10 +24,12 @@ import {
   tableCellActions,
   inputClass,
   StatusBadge,
+  IconActionButton,
 } from "@/components/ui";
 import { toastCreated, toastError, toastSuccess, toastUpdated } from "@/lib/toast";
 import { useMe } from "@/lib/auth";
 import { useHelpCreateAction } from "@/lib/help";
+import { Pencil, UserX, UserCheck } from "lucide-react";
 
 type User = {
   id: string;
@@ -204,11 +206,8 @@ export default function UsersPage() {
                 <TableCell>
                   <StatusBadge value={u.status} />
                 </TableCell>
-                <TableCell className={tableCellActions}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
+                  <TableCell className={tableCellActions}>
+                    <IconActionButton icon={<Pencil className="h-3.5 w-3.5" />} label="Edit user" onClick={() => {
                       setEditing(u);
                       setName(u.name);
                       setEmail(u.email);
@@ -216,20 +215,13 @@ export default function UsersPage() {
                       setRoleKey(u.roles[0]?.role.key ?? "CASHIER");
                       setTenantId(u.tenants?.find((t) => !t.isPlatform)?.tenant.id ?? "");
                       setCreateOpen(false);
-                    }}
-                  >
-                    Edit
-                  </Button>
-                  {u.status === "ACTIVE" ? (
-                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setPending(u)}>
-                      Deactivate
-                    </Button>
-                  ) : (
-                    <Button variant="ghost" size="sm" onClick={() => reactivate.mutate(u.id)}>
-                      Reactivate
-                    </Button>
-                  )}
-                </TableCell>
+                    }} />
+                    {u.status === "ACTIVE" ? (
+                      <IconActionButton icon={<UserX className="h-3.5 w-3.5" />} label="Deactivate user" variant="destructive" onClick={() => setPending(u)} />
+                    ) : (
+                      <IconActionButton icon={<UserCheck className="h-3.5 w-3.5" />} label="Reactivate user" onClick={() => reactivate.mutate(u.id)} />
+                    )}
+                  </TableCell>
               </TableRow>
             ))}
           </TableBody>

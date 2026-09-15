@@ -55,6 +55,8 @@ export type NavItem = {
   icon: LucideIcon;
   permission: string | null;
   platformOnly?: boolean;
+  /** Visible only to the tenant owner (never platform admins, never staff). */
+  ownerOnly?: boolean;
 };
 
 export type NavGroup = {
@@ -81,6 +83,14 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: LayoutDashboard,
     tone: "orange",
     items: [{ title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "report.view" }],
+  },
+  {
+    title: "Billing",
+    icon: CreditCard,
+    tone: "amber",
+    items: [
+      { title: "Billing & Invoices", href: "/billing", icon: CreditCard, permission: "plan.manage", ownerOnly: true },
+    ],
   },
   {
     title: "Sell",
@@ -199,7 +209,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "Branches", href: "/branches", icon: GitBranch, permission: "branch.manage" },
       { title: "Warehouses", href: "/warehouses", icon: Warehouse, permission: "warehouse.manage" },
       { title: "Subscription", href: "/subscription", icon: CreditCard, permission: "plan.manage" },
-      { title: "My Requests", href: "/subscription/requests", icon: ClipboardList, permission: "plan.manage" },
       { title: "API / Integration", href: "/integrations", icon: Plug, permission: "integration.manage" },
       { title: "Backup & Restore", href: "/backup", icon: DatabaseBackup, permission: "backup.manage" },
     ],
@@ -266,6 +275,7 @@ export const PAGE_TITLES: Record<string, { crumb: string; title: string }> = {
   "/branches": { crumb: "Org / Branches", title: "Branches" },
   "/warehouses": { crumb: "Org / Warehouses", title: "Warehouses" },
   "/subscription": { crumb: "Org / Billing", title: "Subscription / Billing" },
+  "/billing": { crumb: "Billing / Invoices", title: "Billing & Invoices" },
   "/subscription/requests": { crumb: "Subscription / Requests", title: "My Requests" },
   "/subscription/requests/new": { crumb: "Subscription / Requests", title: "New Request" },
   "/integrations": { crumb: "Org / API", title: "API / Integration" },
@@ -285,11 +295,12 @@ export function pageMeta(path: string) {
   return hit ? PAGE_TITLES[hit] : { crumb: "POS", title: "POS" };
 }
 
-export function filterNavGroups(can: (p: string) => boolean, opts?: { isPlatform?: boolean }): NavGroup[] {
+export function filterNavGroups(can: (p: string) => boolean, opts?: { isPlatform?: boolean; isOwner?: boolean }): NavGroup[] {
   return NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((i) => {
       if (i.platformOnly && !opts?.isPlatform) return false;
+      if (i.ownerOnly && (!opts?.isOwner || opts?.isPlatform)) return false;
       return !i.permission || can(i.permission);
     }),
   })).filter((g) => g.items.length > 0);

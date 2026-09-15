@@ -11,9 +11,11 @@ import { AppShell } from "@/components/app-shell";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Button, Field, PageHeader, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellActions, tableCellNumeric } from "@/components/ui";
+import { Button, Field, PageHeader, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellNumeric, tableCellActions } from "@/components/ui";
 import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
 import { moneyCell, moneyText, statusBadge, sumField } from "@/components/erp-page";
+import { IconActionButton } from "@/components/ui/icon-action-button";
+import { X } from "lucide-react";
 
 type SO = { id: string; number: string; total: string; status: string; customer?: { name: string }; branch: { name: string } };
 
@@ -103,15 +105,13 @@ export default function OrdersPage() {
                 <TableCell>{o.customer?.name ?? "—"}</TableCell>
                 <TableCell className={tableCellNumeric}>{moneyCell(o.total)}</TableCell>
                 <TableCell>{statusBadge(o.status)}</TableCell>
-                <TableCell className={tableCellActions}>
-                  {o.status !== "CANCELLED" && o.status !== "CONVERTED" ? (
-                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setCancelRow(o)}>
-                      Cancel
-                    </Button>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
+                  <TableCell className={tableCellActions}>
+                    {o.status !== "CANCELLED" && o.status !== "CONVERTED" ? (
+                      <IconActionButton icon={<X className="h-3.5 w-3.5" />} label="Cancel order" variant="destructive" onClick={() => setCancelRow(o)} />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
               </TableRow>
             ))}
           </TableBody>

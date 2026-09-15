@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { cn } from "@/lib/cn";
 
 const sizes = {
@@ -135,9 +136,11 @@ export function Dialog({
               </p>
             ) : null}
           </div>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onCloseRef.current()} aria-label="Close">
-            <X className="h-4 w-4" />
-          </Button>
+          <ActionTooltip label="Close" shortcut="Esc" side="bottom">
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onCloseRef.current()} aria-label="Close dialog">
+              <X className="h-4 w-4" aria-hidden />
+            </Button>
+          </ActionTooltip>
         </div>
         {children ? <div className="overflow-y-auto px-5 py-4">{children}</div> : null}
         {footer ? <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/40 px-5 py-3">{footer}</div> : null}

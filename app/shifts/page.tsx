@@ -6,10 +6,11 @@ import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Button, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellActions } from "@/components/ui";
+import { Button, Field, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellActions, IconActionButton } from "@/components/ui";
 import { statusBadge } from "@/components/erp-page";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { useState } from "react";
+import { X } from "lucide-react";
 
 type Shift = {
   id: string;
@@ -73,22 +74,16 @@ export default function ShiftsPage() {
                 <TableCell>{s.register?.name}</TableCell>
                 <TableCell>{new Date(s.openedAt).toLocaleString()}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
-                <TableCell className={tableCellActions}>
-                  {s.status === "OPEN" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
+                  <TableCell className={tableCellActions}>
+                    {s.status === "OPEN" ? (
+                      <IconActionButton icon={<X className="h-3.5 w-3.5" />} label="Close shift" variant="warning" onClick={() => {
                         setClosingCash("");
                         setPending(s);
-                      }}
-                    >
-                      Close
-                    </Button>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
+                      }} />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
               </TableRow>
             ))}
           </TableBody>

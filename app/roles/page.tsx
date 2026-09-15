@@ -5,9 +5,10 @@ import { api } from "@/lib/api";
 import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Badge, Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, tableCellActions } from "@/components/ui";
+import { Badge, Button, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, tableCellActions, IconActionButton } from "@/components/ui";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { useState } from "react";
+import { Pencil } from "lucide-react";
 
 type Role = { id: string; key: string; name: string; users: number; permissions: string[] };
 
@@ -48,16 +49,10 @@ export default function RolesPage() {
                 <TableCell>{r.users}</TableCell>
                 <TableCell className="max-w-md text-xs text-muted-foreground">{r.permissions.length} keys</TableCell>
                 <TableCell className={tableCellActions}>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => {
-                      setEdit(r);
-                      setSelected(r.permissions);
-                    }}
-                  >
-                    Edit
-                  </Button>
+                  <IconActionButton icon={<Pencil className="h-3.5 w-3.5" />} label="Edit role" onClick={() => {
+                    setEdit(r);
+                    setSelected(r.permissions);
+                  }} />
                 </TableCell>
               </TableRow>
             ))}

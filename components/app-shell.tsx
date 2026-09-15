@@ -109,6 +109,7 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
           isDesktop={isDesktop}
           can={can}
           isPlatform={Boolean(me?.isPlatform)}
+          isOwner={Boolean(me?.roles?.includes("TENANT_OWNER"))}
           loading={isLoading}
           onCloseMobile={() => setOpen(false)}
           onToggleCollapse={toggleCollapse}
@@ -138,14 +139,14 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
         transition={layoutTransition}
       >
         <main className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto print:overflow-visible", pos ? "p-0" : "p-3 md:p-4")}>
-          {me && !me.isPlatform && me.apiAccessEnabled === false && path !== "/subscription" && path !== "/login" ? (
+          {me && !me.isPlatform && me.apiAccessEnabled === false && path !== "/subscription" && path !== "/billing" && !path.startsWith("/billing/") ? (
             <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center gap-4 px-4 text-center">
               <h1 className="text-xl font-semibold tracking-tight">Access paused</h1>
               <p className="text-sm text-muted-foreground">
                 {me.lockMessage || "Please pay your previous month's bill to continue using the platform."}
               </p>
               <Link
-                href="/subscription"
+                href="/billing"
                 className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
               >
                 View bills

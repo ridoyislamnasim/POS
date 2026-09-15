@@ -59,7 +59,7 @@ export function DocumentActions({
       <div className={cn("inline-flex items-center", className)}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size={size} disabled={Boolean(busy)} title="Print" className="gap-1">
+            <Button type="button" variant="outline" size={size} disabled={Boolean(busy)} aria-label="Print options" className="gap-1">
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
               <span>{preparing ?? "Print"}</span>
               <ChevronDown className="h-3 w-3 opacity-70" />

@@ -3,15 +3,15 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Layers, ToggleLeft } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Layers, Pencil, ToggleLeft, X, Check } from "lucide-react";
 import { api } from "@/lib/api";
 import { useMe } from "@/lib/auth";
+import { toastError, toastSuccess } from "@/lib/toast";
 import { AppShell } from "@/components/app-shell";
-import { PageHeader, Badge, Button, Panel } from "@/components/ui";
+import { PageHeader, Button, Panel, inputClass } from "@/components/ui";
 import { LimitEditor } from "@/components/plan/limit-editor";
 import { FeatureToggle } from "@/components/plan/feature-toggle";
-import { EditPlanDrawer } from "@/components/plan/edit-plan-drawer";
 
 type PlanDetail = {
   id: string;
@@ -27,24 +27,12 @@ type PlanDetail = {
   planFeatures: { feature: string; enabled: boolean }[];
 };
 
-const RESOURCE_LABELS: Record<string, string> = {
-  BRANCH: "Branches",
-  WAREHOUSE: "Warehouses",
-  USER: "Users",
-  PRODUCT: "Products",
-  CUSTOMER: "Customers",
-  SUPPLIER: "Suppliers",
-  MONTHLY_SALE: "Monthly Sales",
-  MONTHLY_PURCHASE_ORDER: "Monthly Purchase Orders",
-};
-
 export default function PlanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { me } = useMe();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<"limits" | "features">("limits");
-  const [editOpen, setEditOpen] = useState(false);
-  const [limitOpen, setLimitOpen] = useState(false);
-  const [featureOpen, setFeatureOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const plan = useQuery({
     queryKey: ["platform-plan", id],
@@ -53,6 +41,49 @@ export default function PlanDetailPage() {
   });
 
   const data = plan.data;
+
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [yearlyPrice, setYearlyPrice] = useState("");
+  const [interval, setInterval] = useState("MONTHLY");
+  const [active, setActive] = useState(true);
+
+  function startEdit() {
+    if (!data) return;
+    setName(data.name);
+    setCode(data.code);
+    setDescription(data.description ?? "");
+    setPrice(data.price);
+    setYearlyPrice(data.yearlyPrice ?? "");
+    setInterval(data.interval);
+    setActive(data.active);
+    setEditing(true);
+  }
+
+  const update = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/platform/plans/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name,
+          code,
+          description,
+          price: Number(price) || 0,
+          yearlyPrice: yearlyPrice ? Number(yearlyPrice) : null,
+          interval,
+          active,
+        }),
+      }),
+    onSuccess: () => {
+      toastSuccess("Plan updated");
+      qc.invalidateQueries({ queryKey: ["platform-plan", id] });
+      qc.invalidateQueries({ queryKey: ["platform-plans-comparison"] });
+      setEditing(false);
+    },
+    onError: (e) => toastError(e, "Could not update plan"),
+  });
 
   return (
     <AppShell>
@@ -63,10 +94,94 @@ export default function PlanDetailPage() {
             Back
           </Button>
         </Link>
-        <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-          Edit Plan
-        </Button>
       </PageHeader>
+
+      {data && (
+        <Panel className="mb-4">
+          {editing ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Edit Plan</h3>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={() => update.mutate()} disabled={update.isPending}>
+                    <Check className="mr-1 h-3.5 w-3.5" />
+                    {update.isPending ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Code</label>
+                  <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Name</label>
+                  <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Description</label>
+                  <input className={inputClass} value={description} onChange={(e) => setDescription(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Monthly Price</label>
+                  <input className={inputClass} type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Yearly Price</label>
+                  <input className={inputClass} type="number" value={yearlyPrice} onChange={(e) => setYearlyPrice(e.target.value)} placeholder="Optional" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Interval</label>
+                  <select className={inputClass} value={interval} onChange={(e) => setInterval(e.target.value)}>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="YEARLY">Yearly</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="active" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4" />
+                <label htmlFor="active" className="text-sm">Active</label>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-3 flex items-start justify-between">
+                <div className="flex flex-wrap items-center gap-4 text-sm">
+                  <div>
+                    <span className="text-xs text-muted-foreground">Code</span>
+                    <p className="font-medium">{data.code}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">Name</span>
+                    <p className="font-medium">{data.name}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">Price</span>
+                    <p className="font-medium">৳ {Number(data.price).toLocaleString()}/{data.interval === "YEARLY" ? "yr" : "mo"}</p>
+                  </div>
+                  {data.description && (
+                    <div>
+                      <span className="text-xs text-muted-foreground">Description</span>
+                      <p className="font-medium">{data.description}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-xs text-muted-foreground">Status</span>
+                    <p className="font-medium">{data.active ? "Active" : "Inactive"}</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={startEdit}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </Panel>
+      )}
 
       <div className="mb-4 flex gap-1 rounded-lg border bg-muted p-1 text-sm">
         <button
@@ -89,44 +204,8 @@ export default function PlanDetailPage() {
         <Panel>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Resource Limits</h3>
-            <Button size="sm" variant="outline" onClick={() => setLimitOpen(true)}>
-              Edit Limits
-            </Button>
           </div>
-          {limitOpen ? (
-            <LimitEditor planId={id} limits={data?.planLimits ?? []} onClose={() => setLimitOpen(false)} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs font-medium text-muted-foreground">
-                    <th className="pb-2 pr-4">Resource</th>
-                    <th className="pb-2 pr-4">Limit</th>
-                    <th className="pb-2 pr-4">Unlimited</th>
-                    <th className="pb-2">Disabled</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data?.planLimits ?? []).map((l) => (
-                    <tr key={l.resource} className="border-b last:border-0">
-                      <td className="py-2 pr-4 font-medium">{RESOURCE_LABELS[l.resource] ?? l.resource}</td>
-                      <td className="py-2 pr-4">
-                        {l.unlimited ? (
-                          <Badge variant="outline">∞ Unlimited</Badge>
-                        ) : l.disabled ? (
-                          <Badge variant="secondary">Disabled</Badge>
-                        ) : (
-                          <span className="font-medium">{l.limitValue?.toLocaleString()}</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-4">{l.unlimited ? "✓" : "—"}</td>
-                      <td className="py-2">{l.disabled ? "✓" : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <LimitEditor planId={id} limits={data?.planLimits ?? []} />
         </Panel>
       )}
 
@@ -134,34 +213,9 @@ export default function PlanDetailPage() {
         <Panel>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Feature Access</h3>
-            <Button size="sm" variant="outline" onClick={() => setFeatureOpen(true)}>
-              Edit Features
-            </Button>
           </div>
-          {featureOpen ? (
-            <FeatureToggle planId={id} features={data?.planFeatures ?? []} onClose={() => setFeatureOpen(false)} />
-          ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-              {(data?.planFeatures ?? []).map((f) => (
-                <div
-                  key={f.feature}
-                  className={`rounded-md border px-3 py-2 text-sm ${f.enabled ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/30" : "border-muted bg-muted/30 text-muted-foreground"}`}
-                >
-                  {f.enabled ? "✓" : "—"} {RESOURCE_LABELS[f.feature] ?? f.feature}
-                </div>
-              ))}
-            </div>
-          )}
+          <FeatureToggle planId={id} features={data?.planFeatures ?? []} />
         </Panel>
-      )}
-
-      {editOpen && data && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg border bg-card p-4 shadow-lg">
-            <h3 className="mb-3 text-sm font-semibold">Edit Plan</h3>
-            <EditPlanDrawer plan={data} onClose={() => setEditOpen(false)} />
-          </div>
-        </div>
       )}
     </AppShell>
   );

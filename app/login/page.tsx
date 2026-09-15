@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDownLeft, Eye, EyeOff, ShoppingCart, Store } from "lucide-react";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button, inputClass } from "@/components/ui";
+import { ActionTooltip, Button, inputClass } from "@/components/ui";
 import { getApiErrorMessage, toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 
@@ -123,15 +123,17 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
             />
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              aria-pressed={showPassword}
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+            <ActionTooltip label={showPassword ? "Hide password" : "Show password"} side="top">
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+              </button>
+            </ActionTooltip>
           </div>
           {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
           <Button

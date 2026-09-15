@@ -11,12 +11,13 @@ import { useServerList } from "@/lib/use-list-state";
 import { useVariantOptions } from "@/lib/lookups";
 import { AppShell } from "@/components/app-shell";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Button, Dialog, Field, FilterSelect, PageHeader, StatusBadge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellNumeric } from "@/components/ui";
+import { Button, Dialog, Field, FilterSelect, PageHeader, StatusBadge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellNumeric, IconActionButton } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
 import { moneyCell } from "@/components/erp-page";
 import { newIdempotencyKey, RECEIPT_KINDS } from "@/lib/stock-workflow";
 import { useHelpCreateAction } from "@/lib/help";
+import { Check, X } from "lucide-react";
 
 type Receipt = {
   id: string;
@@ -181,10 +182,10 @@ export default function ReceivingPage() {
                   <TableCell><StatusBadge value={r.status} /></TableCell>
                   <TableCell className="space-x-2">
                     {r.status === "DRAFT" && (can("inventory.receive.approve") || can("purchase.manage")) ? (
-                      <Button size="sm" onClick={() => setPending({ id: r.id, action: "receive" })}>Receive</Button>
+                      <IconActionButton icon={<Check className="h-3.5 w-3.5" />} label="Receive stock" variant="success" onClick={() => setPending({ id: r.id, action: "receive" })} />
                     ) : null}
                     {r.status !== "CANCELLED" && !r.saleReturnId && !(r.purchaseId && r.sourceRef === r.purchaseId) && (can("inventory.receive.approve") || can("purchase.manage")) ? (
-                      <Button size="sm" variant="outline" onClick={() => setPending({ id: r.id, action: "cancel" })}>Cancel</Button>
+                      <IconActionButton icon={<X className="h-3.5 w-3.5" />} label="Cancel document" variant="destructive" onClick={() => setPending({ id: r.id, action: "cancel" })} />
                     ) : null}
                   </TableCell>
                 </TableRow>

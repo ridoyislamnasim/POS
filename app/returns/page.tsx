@@ -9,12 +9,13 @@ import { useMe } from "@/lib/auth";
 import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Button, PageHeader, StatusBadge, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, tableCellNumeric } from "@/components/ui";
+import { Button, PageHeader, StatusBadge, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, tableCellNumeric, IconActionButton } from "@/components/ui";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { moneyCell } from "@/components/erp-page";
 import { DocumentActions } from "@/components/documents/document-actions";
 import { SendSmsButton } from "@/components/sms/send-sms-dialog";
+import { Check, X } from "lucide-react";
 
 type Row = {
   id: string;
@@ -129,8 +130,8 @@ export default function ReturnsPage() {
                     ) : null}
                     {r.status === "PENDING" && canDecide ? (
                       <>
-                        <Button size="sm" onClick={() => setPending({ id: r.id, number: r.number, action: "approve" })}>Approve</Button>
-                        <Button size="sm" variant="outline" onClick={() => setPending({ id: r.id, number: r.number, action: "reject" })}>Reject</Button>
+                        <IconActionButton icon={<Check className="h-3.5 w-3.5" />} label="Approve return" variant="success" onClick={() => setPending({ id: r.id, number: r.number, action: "approve" })} />
+                        <IconActionButton icon={<X className="h-3.5 w-3.5" />} label="Reject return" variant="destructive" onClick={() => setPending({ id: r.id, number: r.number, action: "reject" })} />
                       </>
                     ) : null}
                   </TableCell>

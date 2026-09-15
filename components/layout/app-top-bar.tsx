@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { usePOSStore } from "@/lib/pos-store";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { pageMeta } from "@/lib/nav-config";
@@ -140,19 +141,23 @@ export function AppTopBar({
   return (
     <header className="flex h-12 min-h-12 w-full shrink-0 items-center justify-between gap-2 border-b border-orange-100/80 bg-header/95 px-3 backdrop-blur-sm md:px-4 dark:border-orange-950/50">
       <div className="flex h-8 min-w-0 items-center gap-2">
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 lg:hidden" onClick={onMenu} aria-label="Open sidebar">
-          <Menu className="h-4 w-4" />
-        </Button>
-        {onToggleCollapse ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden h-8 w-8 shrink-0 lg:inline-flex"
-            onClick={onToggleCollapse}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        <ActionTooltip label="Open sidebar" side="bottom">
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 lg:hidden" onClick={onMenu} aria-label="Open sidebar">
+            <Menu className="h-4 w-4" aria-hidden />
           </Button>
+        </ActionTooltip>
+        {onToggleCollapse ? (
+          <ActionTooltip label={collapsed ? "Expand sidebar" : "Collapse sidebar"} description={collapsed ? "Show names and menus" : "Compact icon-only mode"} side="bottom">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden h-8 w-8 shrink-0 lg:inline-flex"
+              onClick={onToggleCollapse}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden /> : <PanelLeftClose className="h-4 w-4" aria-hidden />}
+            </Button>
+          </ActionTooltip>
         ) : null}
         <div className="hidden min-w-0 leading-tight sm:block">
           <div className="truncate text-[11px] text-muted-foreground">{crumb}</div>
@@ -196,32 +201,35 @@ export function AppTopBar({
         ) : null}
         <ThemeToggle />
         {help ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={help.openSearch}
-            aria-label="Help"
-            title="Help (Ctrl+K)"
-          >
-            <CircleHelp className="h-4 w-4 text-primary" />
-          </Button>
+          <ActionTooltip label="Help" description="Search pages and tasks" shortcut="Ctrl+K" side="bottom">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={help.openSearch}
+              aria-label="Open help (Ctrl+K)"
+            >
+              <CircleHelp className="h-4 w-4 text-primary" aria-hidden />
+            </Button>
+          </ActionTooltip>
         ) : null}
         <div className="relative" data-header-menu>
-          <Button
-            className="relative h-8 w-8 rounded-full bg-primary/10 p-2 hover:bg-primary/5"
-            onClick={() => setMenu(menu === "note" ? null : "note")}
-            aria-label="Notifications"
-            aria-expanded={menu === "note"}
-            aria-haspopup="true"
-          >
-            <Bell className="h-4 w-4 text-primary" />
-            {unreadCount > 0 ? (
-              <Badge className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]" variant="destructive">
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </Badge>
-            ) : null}
-          </Button>
+          <ActionTooltip label="Notifications" description={unreadCount > 0 ? `${unreadCount} unread` : "No unread alerts"} side="bottom" variant={unreadCount > 0 ? "warning" : "default"}>
+            <Button
+              className="relative h-8 w-8 rounded-full bg-primary/10 p-2 hover:bg-primary/5"
+              onClick={() => setMenu(menu === "note" ? null : "note")}
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+              aria-expanded={menu === "note"}
+              aria-haspopup="true"
+            >
+              <Bell className="h-4 w-4 text-primary" aria-hidden />
+              {unreadCount > 0 ? (
+                <Badge className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center px-1 text-[10px]" variant="destructive">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Badge>
+              ) : null}
+            </Button>
+          </ActionTooltip>
           {menu === "note" ? (
             <div className="absolute right-0 mt-2 w-80 rounded-md border bg-popover p-2 text-sm shadow-md">
               <div className="flex items-center justify-between px-2 py-1">
@@ -252,9 +260,9 @@ export function AppTopBar({
                     ) : null}
                   </div>
                   <div className="truncate text-[11px] text-muted-foreground">{n.message}</div>
-                  <div className="text-[10px] text-muted-foreground" title={new Date(n.createdAt).toLocaleString()}>
-                    {relativeTime(n.createdAt)}
-                  </div>
+                  <ActionTooltip label={new Date(n.createdAt).toLocaleString()} side="top">
+                    <span className="inline-block text-[10px] text-muted-foreground">{relativeTime(n.createdAt)}</span>
+                  </ActionTooltip>
                 </button>
               ))}
               <button
@@ -271,15 +279,17 @@ export function AppTopBar({
           ) : null}
         </div>
         <div className="relative" data-header-menu>
-          <Button
-            className="h-8 w-8 rounded-full bg-primary/10 p-2 hover:bg-primary/5"
-            onClick={() => setMenu(menu === "lang" ? null : "lang")}
-            aria-label="Language"
-            aria-expanded={menu === "lang"}
-            aria-haspopup="true"
-          >
-            <Globe className="h-4 w-4 text-primary" />
-          </Button>
+          <ActionTooltip label="Language" description={locale === "bn" ? "বাংলা active" : "English active"} side="bottom">
+            <Button
+              className="h-8 w-8 rounded-full bg-primary/10 p-2 hover:bg-primary/5"
+              onClick={() => setMenu(menu === "lang" ? null : "lang")}
+              aria-label="Change language"
+              aria-expanded={menu === "lang"}
+              aria-haspopup="true"
+            >
+              <Globe className="h-4 w-4 text-primary" aria-hidden />
+            </Button>
+          </ActionTooltip>
           {menu === "lang" ? (
             <div className="absolute right-0 mt-2 w-36 rounded-md border bg-popover p-1 shadow-md">
               <button type="button" className="block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => { setLocale("en"); setMenu(null); }}>
@@ -292,19 +302,21 @@ export function AppTopBar({
           ) : null}
         </div>
         <div className="relative" data-header-menu>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-full"
-            onClick={() => setMenu(menu === "user" ? null : "user")}
-            aria-label="Account menu"
-            aria-expanded={menu === "user"}
-            aria-haspopup="true"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-              {initials}
-            </span>
-          </Button>
+          <ActionTooltip label="Account" description={userName ?? "Signed in"} side="bottom">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => setMenu(menu === "user" ? null : "user")}
+              aria-label={userName ? `Account menu for ${userName}` : "Account menu"}
+              aria-expanded={menu === "user"}
+              aria-haspopup="true"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground" aria-hidden>
+                {initials}
+              </span>
+            </Button>
+          </ActionTooltip>
           {menu === "user" ? (
             <div className="absolute right-0 mt-2 w-52 rounded-md border bg-popover p-1 shadow-md">
               <div className="px-2 py-2 text-xs text-muted-foreground">{userName ?? "Signed in"}</div>

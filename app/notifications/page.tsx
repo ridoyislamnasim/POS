@@ -9,7 +9,7 @@ import { useMe } from "@/lib/auth";
 import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Badge, Button, FilterSelect, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass } from "@/components/ui";
+import { Badge, Button, FilterSelect, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, ActionTooltip } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -210,7 +210,9 @@ export default function NotificationsPage() {
                     <Badge variant={priorityVariant(n.priority)}>{n.priority}</Badge>
                   </TableCell>
                   <TableCell>
-                    <span title={new Date(n.createdAt).toLocaleString()}>{relativeTime(n.createdAt)}</span>
+                    <ActionTooltip label={new Date(n.createdAt).toLocaleString()} side="top">
+                      <span className="whitespace-nowrap">{relativeTime(n.createdAt)}</span>
+                    </ActionTooltip>
                   </TableCell>
                 </TableRow>
               ))}

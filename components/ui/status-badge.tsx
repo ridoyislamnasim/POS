@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { VariantProps } from "class-variance-authority";
 import { badgeVariants } from "@/components/ui/badge";
+import { ActionTooltip } from "@/components/ui/action-tooltip";
 
 type Tone = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
@@ -21,11 +22,26 @@ export function statusTone(value: unknown): Tone {
   return "secondary";
 }
 
-export function StatusBadge({ value, className }: { value: unknown; className?: string }) {
+export function StatusBadge({
+  value,
+  className,
+  hint,
+}: {
+  value: unknown;
+  className?: string;
+  hint?: string;
+}) {
   const label = String(value ?? "—");
-  return (
+  const pretty = label.replace(/_/g, " ");
+  const badge = (
     <Badge variant={statusTone(value)} className={className}>
-      {label.replace(/_/g, " ")}
+      {pretty}
     </Badge>
+  );
+  if (!hint) return badge;
+  return (
+    <ActionTooltip label={`Status: ${pretty}`} description={hint}>
+      <span className="inline-flex">{badge}</span>
+    </ActionTooltip>
   );
 }

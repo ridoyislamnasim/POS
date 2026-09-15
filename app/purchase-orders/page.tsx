@@ -11,10 +11,11 @@ import { AppShell } from "@/components/app-shell";
 import { Dialog } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ListFrame } from "@/components/ui/list-frame";
-import { Button, Field, PageHeader, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellActions, tableCellNumeric } from "@/components/ui";
+import { Button, Field, PageHeader, SummaryCards, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, inputClass, tableCellNumeric, tableCellActions, IconActionButton } from "@/components/ui";
 import { toastCreated, toastError, toastSuccess } from "@/lib/toast";
 import { moneyCell, moneyText, statusBadge, sumField } from "@/components/erp-page";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { X } from "lucide-react";
 
 type PO = {
   id: string;
@@ -117,9 +118,7 @@ export default function PurchaseOrdersPage() {
                   <div className="inline-flex flex-wrap items-center justify-end gap-1">
                     <DocumentActions type="purchase-order" id={p.id} number={p.number} />
                     {p.status !== "CANCELLED" && p.status !== "RECEIVED" ? (
-                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setCancelRow(p)}>
-                        Cancel
-                      </Button>
+                      <IconActionButton icon={<X className="h-3.5 w-3.5" />} label="Cancel purchase order" variant="destructive" onClick={() => setCancelRow(p)} />
                     ) : null}
                   </div>
                 </TableCell>

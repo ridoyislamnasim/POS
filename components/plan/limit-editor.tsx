@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -27,23 +27,39 @@ type Limit = {
 type Props = {
   planId: string;
   limits: Limit[];
-  onClose: () => void;
 };
 
-export function LimitEditor({ planId, limits, onClose }: Props) {
+export function LimitEditor({ planId, limits }: Props) {
   const qc = useQueryClient();
-  const [localLimits, setLocalLimits] = useState<Record<string, { limitValue: number; unlimited: boolean; disabled: boolean }>>(() => {
-    const map: Record<string, { limitValue: number; unlimited: boolean; disabled: boolean }> = {};
+  const [localLimits, setLocalLimits] = useState<Record<string, { limitValue: string; unlimited: boolean; disabled: boolean }>>(() => {
+    const map: Record<string, { limitValue: string; unlimited: boolean; disabled: boolean }> = {};
     for (const r of RESOURCES) {
       const existing = limits.find((l) => l.resource === r.key);
       map[r.key] = {
-        limitValue: existing?.limitValue ?? 0,
+        limitValue: existing?.limitValue != null ? String(existing.limitValue) : "",
         unlimited: existing?.unlimited ?? false,
         disabled: existing?.disabled ?? false,
       };
     }
     return map;
   });
+
+  useEffect(() => {
+    setLocalLimits((prev) => {
+      const next = { ...prev };
+      for (const r of RESOURCES) {
+        const existing = limits.find((l) => l.resource === r.key);
+        if (existing) {
+          next[r.key] = {
+            limitValue: existing.limitValue != null ? String(existing.limitValue) : "",
+            unlimited: existing.unlimited,
+            disabled: existing.disabled,
+          };
+        }
+      }
+      return next;
+    });
+  }, [limits]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -52,7 +68,7 @@ export function LimitEditor({ planId, limits, onClose }: Props) {
         body: JSON.stringify({
           limits: RESOURCES.map((r) => ({
             resource: r.key,
-            limitValue: localLimits[r.key].unlimited || localLimits[r.key].disabled ? null : localLimits[r.key].limitValue,
+            limitValue: localLimits[r.key].unlimited || localLimits[r.key].disabled ? null : (localLimits[r.key].limitValue === "" ? null : Number(localLimits[r.key].limitValue)),
             unlimited: localLimits[r.key].unlimited,
             disabled: localLimits[r.key].disabled,
           })),
@@ -61,7 +77,6 @@ export function LimitEditor({ planId, limits, onClose }: Props) {
     onSuccess: () => {
       toastSuccess("Limits saved");
       qc.invalidateQueries({ queryKey: ["platform-plans"] });
-      onClose();
     },
     onError: (e) => toastError(e, "Could not save limits"),
   });
@@ -94,7 +109,8 @@ export function LimitEditor({ planId, limits, onClose }: Props) {
                     type="number"
                     className="h-7 w-24 rounded border bg-transparent px-2 text-sm"
                     value={localLimits[r.key].limitValue}
-                    onChange={(e) => updateLimit(r.key, "limitValue", Number(e.target.value))}
+                    placeholder="0"
+                    onChange={(e) => updateLimit(r.key, "limitValue", e.target.value)}
                     disabled={localLimits[r.key].unlimited || localLimits[r.key].disabled}
                   />
                 </td>
@@ -120,7 +136,6 @@ export function LimitEditor({ planId, limits, onClose }: Props) {
         </table>
       </div>
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
         <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
           {save.isPending ? "Saving..." : "Save Changes"}
         </Button>

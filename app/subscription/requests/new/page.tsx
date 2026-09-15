@@ -13,7 +13,6 @@ type PlanItem = { id: string; code: string; name: string; price: string; yearlyP
 export default function NewRequestPage() {
   const router = useRouter();
   const [requestedPlanId, setRequestedPlanId] = useState("");
-  const [reason, setReason] = useState("");
 
   const planInfo = useQuery({
     queryKey: ["saas-plan"],
@@ -26,22 +25,17 @@ export default function NewRequestPage() {
   });
 
   const currentPlanId = planInfo.data?.plan?.id;
-
   const availablePlans = (plans.data ?? []).filter((p) => p.id !== currentPlanId);
 
   const submit = useMutation({
     mutationFn: () =>
       api("/api/v1/saas/access-requests", {
         method: "POST",
-        body: JSON.stringify({
-          type: "PLAN_CHANGE",
-          requestedPlanId,
-          reason,
-        }),
+        body: JSON.stringify({ type: "PLAN_CHANGE", requestedPlanId }),
       }),
     onSuccess: () => {
       toastSuccess("Plan change request submitted");
-      router.push("/subscription/requests");
+      router.push("/subscription");
     },
     onError: (e) => toastError(e, "Could not submit request"),
   });
@@ -50,7 +44,7 @@ export default function NewRequestPage() {
 
   return (
     <AppShell>
-      <PageHeader title="Change Plan" description="Request to change your subscription plan. An admin will review and approve." />
+      <PageHeader title="Change Plan" description="Request to change your subscription plan." />
 
       <Panel className="mx-auto max-w-lg">
         <div className="space-y-4">
@@ -82,17 +76,7 @@ export default function NewRequestPage() {
             </div>
           )}
 
-          <Field label="Reason">
-            <textarea
-              className={inputClass}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Why do you want to change plan?"
-              rows={3}
-            />
-          </Field>
-
-          <Button onClick={() => submit.mutate()} disabled={!requestedPlanId || !reason || submit.isPending}>
+          <Button onClick={() => submit.mutate()} disabled={!requestedPlanId || submit.isPending}>
             {submit.isPending ? "Submitting..." : "Submit Request"}
           </Button>
         </div>

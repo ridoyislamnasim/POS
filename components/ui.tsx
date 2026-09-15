@@ -31,6 +31,9 @@ export {
   tableSubText,
 } from "@/components/ui/data-table";
 export { StatusBadge, statusTone } from "@/components/ui/status-badge";
+export { ActionTooltip, Tooltip } from "@/components/ui/action-tooltip";
+export { InfoTip } from "@/components/ui/info-tip";
+export { IconActionButton } from "@/components/ui/icon-action-button";
 export { SearchInput, DateRangeFilter, FilterSelect, FilterPopover, FilterChips, Truncate } from "@/components/ui/list-toolbar";
 
 export function PageHeader({
