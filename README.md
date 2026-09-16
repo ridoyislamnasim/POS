@@ -1,13 +1,13 @@
 # POS Frontend (Next.js)
 
-Standalone UI. Port **3000**. No Prisma. Calls the backend over HTTP.
+Standalone UI. Port **3020**. No Prisma. Calls the backend over HTTP.
 
 ```bash
 cd frontend
 pnpm install
-# NEXT_PUBLIC_API_URL=http://localhost:4000 in .env.local
+# .env দেখো: NEXT_PUBLIC_API_URL=http://localhost:4000 (backend), PORT=3020 (frontend)
 pnpm dev
 ```
 
-Open http://localhost:3000
+Open http://localhost:3020
 # POS

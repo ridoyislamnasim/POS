@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+import { buildApiUrl } from "@/lib/config";
+
+export { buildApiUrl };
 
 export type PosDocumentType =
   | "sale"
@@ -29,7 +31,7 @@ function deny(res: Response): never {
 
 async function fetchDoc(path: string) {
   const csrf = csrfFromCookie();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(buildApiUrl(path), {
     credentials: "include",
     headers: csrf ? { "X-CSRF-Token": csrf } : {},
   });
