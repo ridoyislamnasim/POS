@@ -31,7 +31,9 @@ gh secret set BACKEND_URL --body="https://server.shohojhisab.com" --repo="owner/
 
 | Trigger | Environment |
 |---------|-------------|
-| Push to `main` | Production (auto-deploy) |
-| Push to `develop` | Staging (auto-deploy) |
+| Push to `main` | Production (auto-deploy via SSH) |
+| Push to `develop` | Staging (auto-deploy via SSH) |
 | `workflow_dispatch` | User-selected environment |
-| Tag `v*` | Docker build & push |
+| Release published | Production |
+
+All deployments use SSH + `corepack`/`pnpm` on the DigitalOcean droplet. No Docker involved.

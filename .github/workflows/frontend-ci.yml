@@ -29,11 +29,9 @@ concurrency:
 env:
   NODE_VERSION: "22"
   PNPM_VERSION: "9"
-  REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
-  # ── Resolve target environment ──────────────────────────────────────
+  # ── Resolve target environment ──────────────────────────────
   resolve-env:
     runs-on: ubuntu-latest
     outputs:
@@ -79,7 +77,7 @@ jobs:
               ;;
           esac
 
-  # ── Lint ──────────────────────────────────────────────────────────
+  # ── Lint ──────────────────────────────────────────────────
   lint:
     needs: [resolve-env]
     runs-on: ubuntu-latest
@@ -113,7 +111,7 @@ jobs:
         working-directory: frontend
         continue-on-error: true
 
-  # ── Build ─────────────────────────────────────────────────────────
+  # ── Build ─────────────────────────────────────────────────
   build:
     needs: [lint]
     runs-on: ubuntu-latest
@@ -156,7 +154,7 @@ jobs:
           path: frontend/.next/
           retention-days: 5
 
-  # ── Deploy to DigitalOcean ────────────────────────────────────────
+  # ── Deploy to DigitalOcean via SSH ────────────────────────
   deploy:
     needs: [resolve-env, build]
     runs-on: ubuntu-latest
@@ -200,60 +198,21 @@ jobs:
             echo "Frontend healthy at ${{ secrets.FRONTEND_URL }}" || \
             (echo "Frontend not ready" && exit 1)
 
-  # ── Docker Build & Push ───────────────────────────────────────────
-  docker:
-    needs: [lint]
+  # ── Summary ───────────────────────────────────────────────
+  summary:
+    needs: [resolve-env, deploy]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')
+    if: always()
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install
-        working-directory: frontend
-
-      - name: Build frontend
-        run: pnpm build
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_APP_ENV: ${{ needs.resolve-env.outputs.environment }}
-          NEXT_PUBLIC_API_URL: ${{ needs.resolve-env.outputs.backend_url }}
-
-      - name: Login to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:latest
-          build-args: |
-            NEXT_PUBLIC_APP_ENV=${{ needs.resolve-env.outputs.environment }}
-            NEXT_PUBLIC_API_URL=${{ secrets.BACKEND_URL }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          labels: |
-            org.opencontainers.image.title=pos-frontend
-            org.opencontainers.image.environment=${{ needs.resolve-env.outputs.environment }}
+      - name: Deployment summary
+        run: |
+          echo "## Frontend Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | ${{ needs.resolve-env.outputs.environment }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Host | ${{ secrets.DO_HOST }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Frontend URL | ${{ secrets.FRONTEND_URL }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Lint | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build | ${{ needs.build.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Deploy | ${{ needs.deploy.result }} |" >> "$GITHUB_STEP_SUMMARY"
