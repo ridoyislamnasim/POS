@@ -67,11 +67,11 @@ export default function LoginPage() {
           <div className="mb-4 flex gap-2">
             <span className="inline-flex items-center gap-1 rounded-full bg-white/18 px-3 py-1 text-xs font-semibold ring-1 ring-white/30">
               <ShoppingCart className="h-3.5 w-3.5" />
-              Sell · green
+              Sell
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-950/25 px-3 py-1 text-xs font-semibold ring-1 ring-amber-200/40">
               <ArrowDownLeft className="h-3.5 w-3.5" />
-              Buy · amber
+              Buy
             </span>
           </div>
           <p className="text-2xl font-bold leading-tight">Buy stock in. Sell it out. One register.</p>

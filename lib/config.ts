@@ -1,92 +1,145 @@
 /**
- * Central frontend config — সব env read এক জায়গায়।
- * পরে port / backend URL বদলাতে চাইলে শুধু `.env` বদলাও, কোডে হাত দিতে হবে না।
+ * Central frontend API config — SINGLE source of truth for the backend base URL.
  *
- * Env keys:
- *  - PORT / NEXT_PUBLIC_PORT        -> frontend কোন port-এ run হবে (default: 3020)
- *  - NEXT_PUBLIC_APP_URL            -> frontend নিজের URL (default: http://localhost:3020)
- *  - NEXT_PUBLIC_API_URL            -> backend API URL. দুটো form-ই চলবে:
- *       http://localhost:4000          (base — recommended)
- *       http://localhost:4000/api/v1   (সহ দিলেও auto-normalize হবে)
- *  - NEXT_PUBLIC_BACKEND_PORT       -> শুধু reference/document-এর জন্য (default: 4000)
+ * Chain: API clients (`lib/api.ts`, `lib/documents.ts`) -> this config
+ *        -> `NEXT_PUBLIC_API_URL` -> local OR production backend.
+ *
+ * No backend URL is hardcoded anywhere in app code. No per-call
+ * `if (env === ...) fetch(...)` logic — the environment is resolved
+ * ONCE here, every API client just uses the resolved base URL.
+ *
+ * Required env (no silent fallbacks):
+ *  - NEXT_PUBLIC_APP_ENV : "local" | "production"
+ *  - NEXT_PUBLIC_API_URL : backend origin, e.g.
+ *      local:      http://localhost:4000
+ *      production: https://server.shohojhisab.com   (no trailing /api)
+ *    A trailing `/api` or `/api/v1` is normalized away so all three forms
+ *    resolve to the same base (prevents double `/api/api/v1`).
+ *
+ * Missing/invalid values throw a clear error at startup/build instead of
+ * silently calling the wrong backend.
+ *
+ * Next.js rule: NEXT_PUBLIC_* is embedded at dev-start / build time.
+ * After changing `.env.local` you MUST restart `npm run dev`;
+ * for production, configure env BEFORE `npm run build`.
  */
+
+export const APP_ENVIRONMENTS = ["local", "production"] as const;
+export type AppEnv = (typeof APP_ENVIRONMENTS)[number];
 
 export const API_VERSION_PREFIX = "/api/v1";
 
-function cleanUrl(value: string | undefined, fallback: string): string {
-  const v = (value ?? "").trim().replace(/\/+$/, "");
-  return v || fallback;
+function readAppEnv(): AppEnv {
+  const raw = (process.env.NEXT_PUBLIC_APP_ENV ?? "").trim().toLowerCase();
+  if (!raw) {
+    throw new Error(
+      "[api-config] NEXT_PUBLIC_APP_ENV is missing. " +
+        `Set it to one of: ${APP_ENVIRONMENTS.join(" | ")}. ` +
+        "Then restart `npm run dev` (or rebuild for production).",
+    );
+  }
+  if (raw !== "local" && raw !== "production") {
+    throw new Error(
+      `[api-config] Invalid NEXT_PUBLIC_APP_ENV=${JSON.stringify(raw)}. ` +
+        `Supported values: ${APP_ENVIRONMENTS.join(" | ")}.`,
+    );
+  }
+  return raw;
 }
 
-function cleanPort(value: string | undefined, fallback: number): number {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+function readApiUrl(): string {
+  const raw = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "");
+  if (!raw) {
+    throw new Error(
+      "[api-config] NEXT_PUBLIC_API_URL is missing. " +
+        "Set the backend base URL (e.g. http://localhost:4000 for local, " +
+        "https://server.shohojhisab.com for production). " +
+        "Then restart `npm run dev` (or rebuild for production).",
+    );
+  }
+  if (!/^https?:\/\//i.test(raw)) {
+    throw new Error(
+      `[api-config] Invalid NEXT_PUBLIC_API_URL=${JSON.stringify(raw)}. ` +
+        "It must start with http:// or https://",
+    );
+  }
+  return stripApiSuffix(raw);
 }
 
-/** `http://localhost:4000/api/v1/` -> `http://localhost:4000` (trailing /api/v1 strip) */
+/** Trailing `/api/v1` or `/api` is normalized to the origin.
+ *  `https://host/api/v1` -> `https://host`
+ *  `https://host/api/`   -> `https://host`
+ *  `https://host`        -> `https://host` (unchanged — exact env value is kept) */
 function stripApiSuffix(url: string): string {
-  return url.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "") || url;
+  return url
+    .replace(/\/api\/v1\/?$/, "")
+    .replace(/\/api\/?$/, "")
+    .replace(/\/+$/, "") || url;
 }
 
-const FRONTEND_PORT = cleanPort(
-  process.env.NEXT_PUBLIC_PORT ?? process.env.PORT,
-  3020,
-);
+const APP_ENV = readAppEnv();
+const API_URL = readApiUrl();
 
-const BACKEND_PORT = cleanPort(process.env.NEXT_PUBLIC_BACKEND_PORT, 4000);
-
-const APP_URL = cleanUrl(
-  process.env.NEXT_PUBLIC_APP_URL,
-  `http://localhost:${FRONTEND_PORT}`,
-);
-
-const RAW_API_URL = cleanUrl(
-  process.env.NEXT_PUBLIC_API_URL,
-  `http://localhost:${BACKEND_PORT}`,
-);
-
-// সবসময় origin/base আকারে রাখো — শেষে /api/v1 থাকলে কেটে দাও,
-// তাহলে env-তে দুটো form-ই দিলে একই result আসবে।
-const API_URL = stripApiSuffix(RAW_API_URL);
-
-/** Full API prefix সহ URL, যেমন http://localhost:4000/api/v1 */
+/** Full API prefix, e.g. http://localhost:4000/api/v1 */
 const API_BASE_URL = `${API_URL}${API_VERSION_PREFIX}`;
 
+function isLocalhostLike(url: string): boolean {
+  return /^(https?:\/\/)?(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|.*\.local)(:\d+)?(\/|$)/i.test(url);
+}
+
+// Warn (never throw) on env/URL mismatch — the classic wrong-backend accident.
+if (APP_ENV === "local" && !isLocalhostLike(API_URL)) {
+  console.warn(
+    `[api-config] WARNING: NEXT_PUBLIC_APP_ENV=local but NEXT_PUBLIC_API_URL=${API_URL} ` +
+      "points at a remote backend. Local work may hit production data.",
+  );
+}
+if (APP_ENV === "production" && isLocalhostLike(API_URL)) {
+  console.warn(
+    `[api-config] WARNING: NEXT_PUBLIC_APP_ENV=production but NEXT_PUBLIC_API_URL=${API_URL} ` +
+      "points at localhost. The production build will not reach the live backend.",
+  );
+}
+
+// Dev/debug visibility only (no secrets — just env name + base URL).
+if (process.env.NODE_ENV !== "production") {
+  console.info(`[api-config] Environment: ${APP_ENV.toUpperCase()} | API: ${API_URL}`);
+}
+
 export const appConfig = {
-  /** Frontend port — `npm run dev` এই port-এ run করে (default 3020) */
-  frontendPort: FRONTEND_PORT,
-  /** Frontend নিজের URL */
-  appUrl: APP_URL,
-  /** Backend origin (default http://localhost:4000) — শেষে /api/v1 থাকে না */
+  /** "local" | "production" — from NEXT_PUBLIC_APP_ENV */
+  appEnv: APP_ENV,
+  /** Backend origin from NEXT_PUBLIC_API_URL (no /api/v1 suffix) */
   apiUrl: API_URL,
-  /** Backend API prefix সহ (default http://localhost:4000/api/v1) */
+  /** Backend API prefix, e.g. https://server.shohojhisab.com/api/v1 */
   apiBaseUrl: API_BASE_URL,
-  /** Backend port — শুধু reference-এর জন্য */
-  backendPort: BACKEND_PORT,
-  isProduction: process.env.NODE_ENV === "production",
 } as const;
 
-// Backward-compat: পুরনো import `API_URL from "@/lib/api"` ভাঙবে না।
+// Backward-compat: existing `API_URL from "@/lib/api"` imports keep working.
 export { API_URL, API_BASE_URL };
 export default appConfig;
 
 /**
- * API path -> full URL builder। দুই রকম path-ই support করে:
- *  - "/api/v1/auth/login" (full prefix সহ — যেভাবে সব page-এ লেখা আছে)
- *  - "/auth/login"         (short form — auto `/api/v1` বসবে)
- *  - "http..."             (absolute URL — touch করে না)
- * fileUrl (/uploads/...) এর জন্য এটা use কোরো না — ওটা সরাসরি API_URL + path।
+ * API path -> full URL builder. All API clients must go through this.
+ *  - "/api/v1/auth/login" (full prefix, as used across pages)
+ *  - "/auth/login"         (short form — auto `/api/v1` prefix)
+ *  - "http..."             (absolute URL — untouched)
+ * fileUrl (/uploads/...) must NOT use this — it joins API_URL + path directly.
  */
 export function buildApiUrl(path: string): string {
   const p = path.trim();
   if (/^https?:\/\//i.test(p)) return p;
   const withSlash = p.startsWith("/") ? p : `/${p}`;
+  // Safety: never produce a double /api even if API_URL ever ends with /api.
+  const base = API_URL.replace(/\/+$/, "");
+  const baseWithoutApi =
+    base.endsWith("/api") && withSlash.startsWith("/api/") ? base.slice(0, -4) : base;
   if (withSlash.startsWith(`${API_VERSION_PREFIX}/`) || withSlash === API_VERSION_PREFIX) {
-    return `${API_URL}${withSlash}`;
+    return `${baseWithoutApi}${withSlash}`;
   }
   if (withSlash.startsWith("/api/")) {
-    // অন্য কোনো /api/* prefix হলে যেমন আছে তেমনই base-এ জোড়া দাও
-    return `${API_URL}${withSlash}`;
+    // Other /api/* paths as-is (/api/health, /api/ready).
+    return `${baseWithoutApi}${withSlash}`;
   }
   return `${API_BASE_URL}${withSlash}`;
 }
