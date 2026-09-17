@@ -150,13 +150,17 @@ jobs:
           chmod 600 ~/.ssh/digitalocean
           ssh-keyscan -p ${{ secrets.DO_PORT }} ${{ secrets.DO_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Deploy frontend
+       - name: Deploy frontend
         run: |
           ssh -p ${{ secrets.DO_PORT }} ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} \
             "cd ~/app/frontend && \
+             corepack enable && \
+             corepack prepare pnpm@9 --activate && \
              export NEXT_PUBLIC_APP_ENV=${{ needs.resolve.outputs.environment }} && \
              export NEXT_PUBLIC_API_URL=${{ secrets.BACKEND_URL }} && \
-             pm2 restart frontend --update-env || pm2 start server.js --name frontend --update-env"
+             pnpm install --frozen-lockfile --prod && \
+             pm2 restart frontend --update-env || \
+             pm2 start server.js --name frontend --update-env"
 
       - name: Verify deployment
         run: |
