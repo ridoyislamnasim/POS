@@ -1,15 +1,12 @@
 name: Frontend CI/CD
 
+# NOTE: repo root IS the Next.js app (package.json lives beside .github/).
+# Do NOT add `frontend/**` path filters or `working-directory: frontend` —
+# that silently stops this workflow from ever triggering.
 on:
   push:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy.yml"
     branches: [main, develop]
   pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy.yml"
     branches: [main, develop]
   workflow_dispatch:
     inputs:
@@ -29,8 +26,11 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 concurrency:
-  group: frontend-ci-${{ github.ref }}-${{ github.workflow }}
+  group: frontend-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -38,56 +38,34 @@ env:
   PNPM_VERSION: "9"
 
 jobs:
-  # ── Resolve target environment ──────────────────────────────
+  # ── Resolve target environment (staging | production) ─────────
+  # Outputs ONLY the environment name. Secrets are NEVER passed
+  # through job outputs — downstream jobs read secrets directly.
   resolve-env:
     runs-on: ubuntu-latest
     outputs:
-      environment: ${{ steps.env.outputs.value }}
-      backend_url: ${{ steps.env.outputs.backend_url }}
-      do_host: ${{ steps.env.outputs.do_host }}
-      do_port: ${{ steps.env.outputs.do_port }}
-      do_user: ${{ steps.env.outputs.do_user }}
-      frontend_url: ${{ steps.env.outputs.frontend_url }}
+      environment: ${{ steps.resolve.outputs.environment }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Resolve environment
-        id: env
+        id: resolve
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "release" ]; then
+            ENV="production"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             ENV="${{ github.event.inputs.environment }}"
           elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
             ENV="production"
-          elif [ "${{ github.ref }}" = "refs/heads/develop" ]; then
-            ENV="staging"
           else
             ENV="staging"
           fi
-          echo "value=$ENV" >> "$GITHUB_OUTPUT"
           echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "Target environment: $ENV"
 
-          case "$ENV" in
-            production)
-              echo "backend_url=${{ secrets.BACKEND_URL }}" >> "$GITHUB_OUTPUT"
-              echo "frontend_url=${{ secrets.FRONTEND_URL }}" >> "$GITHUB_OUTPUT"
-              echo "do_host=${{ secrets.DO_HOST }}" >> "$GITHUB_OUTPUT"
-              echo "do_port=${{ secrets.DO_PORT }}" >> "$GITHUB_OUTPUT"
-              echo "do_user=${{ secrets.DO_USER }}" >> "$GITHUB_OUTPUT"
-              ;;
-            staging)
-              echo "backend_url=${{ secrets.BACKEND_URL_STAGING }}" >> "$GITHUB_OUTPUT"
-              echo "frontend_url=${{ secrets.FRONTEND_URL_STAGING }}" >> "$GITHUB_OUTPUT"
-              echo "do_host=${{ secrets.DO_HOST_STAGING }}" >> "$GITHUB_OUTPUT"
-              echo "do_port=${{ secrets.DO_PORT }}" >> "$GITHUB_OUTPUT"
-              echo "do_user=${{ secrets.DO_USER }}" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
-
-  # ── Lint ──────────────────────────────────────────────────
+  # ── Lint + type check ─────────────────────────────────────────
   lint:
     needs: [resolve-env]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -103,25 +81,37 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install
-        working-directory: frontend
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
-        run: npx tsc --noEmit
-        working-directory: frontend
+        run: pnpm exec tsc --noEmit
 
-      - name: Lint
-        run: npx eslint src/ --ext .ts,.tsx --max-warnings 0
-        working-directory: frontend
-        continue-on-error: true
+      # This repo currently has no ESLint config. The old
+      # `npx eslint src/ --ext .ts,.tsx` ALWAYS failed
+      # (--ext was removed in ESLint v9). Run lint only when
+      # a config exists; otherwise skip with a clear message.
+      - name: Lint (if configured)
+        run: |
+          if [ -f "eslint.config.js" ] || [ -f "eslint.config.mjs" ] || [ -f "eslint.config.cjs" ] || [ -f ".eslintrc.json" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc" ]; then
+            pnpm exec eslint . --max-warnings 0
+          else
+            echo "No ESLint config found — skipping lint."
+          fi
 
-  # ── Build ─────────────────────────────────────────────────
+  # ── Build (validation) ────────────────────────────────────────
+  # IMPORTANT: lib/config.ts only accepts NEXT_PUBLIC_APP_ENV =
+  # "local" | "production". "staging" FAILS the build, so staging
+  # builds also use APP_ENV=production — only the API URL differs.
   build:
-    needs: [lint]
+    needs: [lint, resolve-env]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_APP_ENV: production
+      NEXT_PUBLIC_API_URL: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.BACKEND_URL || secrets.BACKEND_URL_STAGING || secrets.BACKEND_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,92 +127,194 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install
-        working-directory: frontend
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
-        run: npx tsc --noEmit
-        working-directory: frontend
+        run: pnpm exec tsc --noEmit
 
       - name: Build
         run: pnpm build
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_APP_ENV: ${{ needs.resolve-env.outputs.environment }}
-          NEXT_PUBLIC_API_URL: ${{ needs.resolve-env.outputs.backend_url }}
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build-${{ needs.resolve-env.outputs.environment }}
-          path: frontend/.next/
-          retention-days: 5
-
-  # ── Deploy to DigitalOcean via SSH ────────────────────────
+  # ── Deploy to DigitalOcean via SSH ────────────────────────────
+  # Strategy: update the existing checkout in the live folder
+  # (~/pos/POS for production), reinstall, rebuild ON the server
+  # (NEXT_PUBLIC_* vars are baked at build time), then pm2 restart.
+  # PRs never reach this job.
   deploy:
     needs: [resolve-env, build]
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.event_name == 'release'
+    timeout-minutes: 20
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'release' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event.inputs.force_rollback != 'true'
     environment: ${{ needs.resolve-env.outputs.environment }}
+    env:
+      TARGET_ENV: ${{ needs.resolve-env.outputs.environment }}
+      BACKEND_URL_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.BACKEND_URL || secrets.BACKEND_URL_STAGING || secrets.BACKEND_URL }}
+      FRONTEND_URL_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.FRONTEND_URL || secrets.FRONTEND_URL_STAGING || secrets.FRONTEND_URL }}
+      DO_HOST_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.DO_HOST || secrets.DO_HOST_STAGING || secrets.DO_HOST }}
+      DO_PORT: ${{ secrets.DO_PORT }}
+      DO_USER: ${{ secrets.DO_USER }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Validate secrets
+        run: |
+          MISSING=""
+          [ -n "$BACKEND_URL_RESOLVED" ]  || MISSING="$MISSING BACKEND_URL(_STAGING)"
+          [ -n "$FRONTEND_URL_RESOLVED" ] || MISSING="$MISSING FRONTEND_URL(_STAGING)"
+          [ -n "$DO_HOST_RESOLVED" ]      || MISSING="$MISSING DO_HOST(_STAGING)"
+          [ -n "${{ secrets.DO_SSH_KEY }}" ] || MISSING="$MISSING DO_SSH_KEY"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing GitHub secrets:$MISSING (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+          echo "Secrets OK for environment: $TARGET_ENV"
 
       - name: Configure SSH
-        shell: bash
         run: |
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           printf '%s\n' '${{ secrets.DO_SSH_KEY }}' > ~/.ssh/digitalocean
           chmod 600 ~/.ssh/digitalocean
-          ssh-keyscan -p "${{ secrets.DO_PORT }}" "${{ secrets.DO_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -p "${DO_PORT:-22}" "$DO_HOST_RESOLVED" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build-${{ needs.resolve-env.outputs.environment }}
-          path: frontend/.next/
-
-      - name: Deploy frontend to droplet
-        shell: bash
+      - name: Deploy to droplet
         run: |
-          ssh -i ~/.ssh/digitalocean -p "${{ secrets.DO_PORT }}" \
-            "${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}" \
-            "cd ~/app/frontend && \
-             corepack enable && \
-             corepack prepare pnpm@9 --activate && \
-             pnpm install --frozen-lockfile --prod && \
-             pm2 restart frontend --update-env || \
-             pm2 start server.js --name frontend --update-env"
+          ssh -i ~/.ssh/digitalocean -p "${DO_PORT:-22}" \
+            "$DO_USER@$DO_HOST_RESOLVED" \
+            "TARGET_ENV='$TARGET_ENV' BACKEND_URL_RESOLVED='$BACKEND_URL_RESOLVED' GIT_SHA='$GITHUB_SHA' bash -s" <<'REMOTE_EOF'
+          set -euo pipefail
+
+          if [ "$TARGET_ENV" = "production" ]; then
+            APP_DIR="$HOME/pos/POS"
+            PM2_NAME="frontend"
+            BRANCH="main"
+          else
+            APP_DIR="$HOME/pos/POS-staging"
+            PM2_NAME="frontend-staging"
+            BRANCH="develop"
+          fi
+
+          # Live folder must be a git checkout of this repo.
+          if [ ! -d "$APP_DIR/.git" ]; then
+            echo "No git checkout at $APP_DIR — cloning branch $BRANCH..."
+            git clone --branch "$BRANCH" "git@github.com:${GITHUB_REPOSITORY}.git" "$APP_DIR"
+          fi
+          cd "$APP_DIR"
+
+          git fetch --all --prune
+          if git cat-file -e "$GIT_SHA^{commit}" 2>/dev/null; then
+            git reset --hard "$GIT_SHA"
+          else
+            echo "SHA $GIT_SHA not found on droplet — deploying origin/$BRANCH instead."
+            git reset --hard "origin/$BRANCH"
+          fi
+
+          export NVM_DIR="$HOME/.nvm"
+          if [ -s "$NVM_DIR/nvm.sh" ]; then
+            # shellcheck disable=SC1091
+            . "$NVM_DIR/nvm.sh"
+          fi
+          corepack enable || true
+          corepack prepare pnpm@9 --activate || true
+
+          pnpm install --frozen-lockfile
+
+          # NEXT_PUBLIC_* is embedded at build time — must be set here.
+          # APP_ENV stays "production" (lib/config.ts rejects "staging").
+          export NEXT_PUBLIC_APP_ENV="production"
+          export NEXT_PUBLIC_API_URL="$BACKEND_URL_RESOLVED"
+          export NODE_OPTIONS="--max-old-space-size=1536"
+          pnpm build
+
+          if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+            pm2 restart "$PM2_NAME" --update-env
+          else
+            if [ "$TARGET_ENV" = "production" ]; then
+              pm2 start pnpm --name "$PM2_NAME" -- start
+            else
+              pm2 start pnpm --name "$PM2_NAME" -- exec next start --port 3021
+            fi
+          fi
+          pm2 save || true
+          pm2 list
+          REMOTE_EOF
 
       - name: Verify deployment
-        shell: bash
         run: |
-          sleep 3
-          curl -sf ${{ secrets.FRONTEND_URL }}/ && \
-            echo "Frontend healthy at ${{ secrets.FRONTEND_URL }}" || \
-            (echo "Frontend not ready" && exit 1)
+          echo "Waiting for $FRONTEND_URL_RESOLVED ..."
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 10 "$FRONTEND_URL_RESOLVED" >/dev/null; then
+              echo "Frontend healthy at $FRONTEND_URL_RESOLVED"
+              exit 0
+            fi
+            echo "Attempt $i/6 not ready yet, retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Frontend not reachable at $FRONTEND_URL_RESOLVED after 60s"
+          exit 1
 
-  # ── Rollback ──────────────────────────────────────────
+  # ── Rollback (manual only) ────────────────────────────────────
   rollback:
     needs: [resolve-env]
-    if: github.event.inputs.force_rollback == true
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.force_rollback == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: ${{ needs.resolve-env.outputs.environment }}
+    env:
+      TARGET_ENV: ${{ needs.resolve-env.outputs.environment }}
+      BACKEND_URL_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.BACKEND_URL || secrets.BACKEND_URL_STAGING || secrets.BACKEND_URL }}
+      DO_HOST_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.DO_HOST || secrets.DO_HOST_STAGING || secrets.DO_HOST }}
+      DO_PORT: ${{ secrets.DO_PORT }}
+      DO_USER: ${{ secrets.DO_USER }}
     steps:
-      - name: Rollback to previous version
-        shell: bash
+      - name: Configure SSH
         run: |
-          ssh -i ~/.ssh/digitalocean -p "${{ secrets.DO_PORT }}" \
-            "${{ secrets.DO_USER }}@${{ secrets.DO_HOST }}" \
-            "cd ~/app/frontend && \
-             pm2 deploy rollback production || \
-             pm2 restart frontend --update-env"
-          echo "Rolled back to previous version on ${{ secrets.DO_HOST }}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' '${{ secrets.DO_SSH_KEY }}' > ~/.ssh/digitalocean
+          chmod 600 ~/.ssh/digitalocean
+          ssh-keyscan -p "${DO_PORT:-22}" "$DO_HOST_RESOLVED" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-  # ── Summary ───────────────────────────────────────────
+      - name: Rollback to previous commit
+        run: |
+          ssh -i ~/.ssh/digitalocean -p "${DO_PORT:-22}" \
+            "$DO_USER@$DO_HOST_RESOLVED" \
+            "TARGET_ENV='$TARGET_ENV' BACKEND_URL_RESOLVED='$BACKEND_URL_RESOLVED' bash -s" <<'REMOTE_EOF'
+          set -euo pipefail
+
+          if [ "$TARGET_ENV" = "production" ]; then
+            APP_DIR="$HOME/pos/POS"
+            PM2_NAME="frontend"
+          else
+            APP_DIR="$HOME/pos/POS-staging"
+            PM2_NAME="frontend-staging"
+          fi
+          cd "$APP_DIR"
+
+          PREV_SHA="$(git rev-parse HEAD~1)"
+          echo "Rolling back to $PREV_SHA ..."
+          git reset --hard "$PREV_SHA"
+
+          export NVM_DIR="$HOME/.nvm"
+          if [ -s "$NVM_DIR/nvm.sh" ]; then
+            # shellcheck disable=SC1091
+            . "$NVM_DIR/nvm.sh"
+          fi
+          corepack enable || true
+          corepack prepare pnpm@9 --activate || true
+
+          pnpm install --frozen-lockfile
+          export NEXT_PUBLIC_APP_ENV="production"
+          export NEXT_PUBLIC_API_URL="$BACKEND_URL_RESOLVED"
+          export NODE_OPTIONS="--max-old-space-size=1536"
+          pnpm build
+          pm2 restart "$PM2_NAME" --update-env
+          pm2 save || true
+          echo "Rolled back to $PREV_SHA"
+          REMOTE_EOF
+
+  # ── Summary ───────────────────────────────────────────────────
   summary:
     needs: [resolve-env, lint, build, deploy, rollback]
     runs-on: ubuntu-latest
@@ -235,8 +327,8 @@ jobs:
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Environment | ${{ needs.resolve-env.outputs.environment }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Host | ${{ secrets.DO_HOST }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Frontend URL | ${{ secrets.FRONTEND_URL }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Ref | ${{ github.ref }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SHA | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Lint | ${{ needs.lint.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Build | ${{ needs.build.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Deploy | ${{ needs.deploy.result }} |" >> "$GITHUB_STEP_SUMMARY"
