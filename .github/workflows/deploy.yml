@@ -36,11 +36,6 @@ concurrency:
 env:
   NODE_VERSION: "22"
   PNPM_VERSION: "9"
-  # Fixed production backend origin (no trailing /api). Last-resort default
-  # ONLY for production builds when the BACKEND_URL secret is empty.
-  # Secrets always win when present. Never hardcode this in app source —
-  # lib/config.ts reads it from NEXT_PUBLIC_API_URL at build time.
-  PRODUCTION_BACKEND_URL: "https://server.shohojhisab.com"
 
 jobs:
   # ── Resolve target environment (staging | production) ─────────
@@ -116,10 +111,6 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_PUBLIC_APP_ENV: production
-      # Secrets first; fixed production default only when secrets are empty AND
-      # the target is production. Staging stays strict — it fails loudly with
-      # the [api-config] error instead of silently pointing at production data.
-      NEXT_PUBLIC_API_URL: ${{ (needs.resolve-env.outputs.environment == 'production' && secrets.BACKEND_URL) || secrets.BACKEND_URL_STAGING || secrets.BACKEND_URL || (needs.resolve-env.outputs.environment == 'production' && env.PRODUCTION_BACKEND_URL) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,6 +134,30 @@ jobs:
       - name: Type check
         run: pnpm exec tsc --noEmit
 
+      # Resolve NEXT_PUBLIC_API_URL in plain shell (no complex workflow
+      # expressions): secrets first; fixed production default only when
+      # secrets are empty AND the target is production. Staging stays
+      # strict — it fails loudly instead of silently pointing at prod data.
+      # Never hardcode this in app source — lib/config.ts reads it at build time.
+      - name: Resolve public build env
+        run: |
+          if [ "${{ needs.resolve-env.outputs.environment }}" = "production" ]; then
+            API_URL="${{ secrets.BACKEND_URL }}"
+            if [ -z "$API_URL" ]; then
+              API_URL="https://server.shohojhisab.com"
+              echo "::warning::BACKEND_URL secret is empty — using default production API URL."
+            fi
+          else
+            API_URL="${{ secrets.BACKEND_URL_STAGING }}"
+            [ -n "$API_URL" ] || API_URL="${{ secrets.BACKEND_URL }}"
+            if [ -z "$API_URL" ]; then
+              echo "::error::Staging API URL is empty — set BACKEND_URL_STAGING (or BACKEND_URL) secret."
+              exit 1
+            fi
+          fi
+          echo "NEXT_PUBLIC_API_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "API URL resolved for ${{ needs.resolve-env.outputs.environment }} build."
+
       - name: Build
         run: pnpm build
 
@@ -159,12 +174,25 @@ jobs:
     environment: ${{ needs.resolve-env.outputs.environment }}
     env:
       TARGET_ENV: ${{ needs.resolve-env.outputs.environment }}
-      BACKEND_URL_RESOLVED: ${{ (needs.resolve-env.outputs.environment == 'production' && secrets.BACKEND_URL) || secrets.BACKEND_URL_STAGING || secrets.BACKEND_URL || (needs.resolve-env.outputs.environment == 'production' && env.PRODUCTION_BACKEND_URL) }}
       FRONTEND_URL_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.FRONTEND_URL || secrets.FRONTEND_URL_STAGING || secrets.FRONTEND_URL }}
       DO_HOST_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.DO_HOST || secrets.DO_HOST_STAGING || secrets.DO_HOST }}
       DO_PORT: ${{ secrets.DO_PORT }}
       DO_USER: ${{ secrets.DO_USER }}
     steps:
+      - name: Resolve backend URL
+        run: |
+          if [ "$TARGET_ENV" = "production" ]; then
+            API_URL="${{ secrets.BACKEND_URL }}"
+            if [ -z "$API_URL" ]; then
+              API_URL="https://server.shohojhisab.com"
+              echo "::warning::BACKEND_URL secret is empty — using default production API URL."
+            fi
+          else
+            API_URL="${{ secrets.BACKEND_URL_STAGING }}"
+            [ -n "$API_URL" ] || API_URL="${{ secrets.BACKEND_URL }}"
+          fi
+          echo "BACKEND_URL_RESOLVED=$API_URL" >> "$GITHUB_ENV"
+
       - name: Validate secrets
         run: |
           MISSING=""
@@ -271,7 +299,6 @@ jobs:
     environment: ${{ needs.resolve-env.outputs.environment }}
     env:
       TARGET_ENV: ${{ needs.resolve-env.outputs.environment }}
-      BACKEND_URL_RESOLVED: ${{ (needs.resolve-env.outputs.environment == 'production' && secrets.BACKEND_URL) || secrets.BACKEND_URL_STAGING || secrets.BACKEND_URL || (needs.resolve-env.outputs.environment == 'production' && env.PRODUCTION_BACKEND_URL) }}
       DO_HOST_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.DO_HOST || secrets.DO_HOST_STAGING || secrets.DO_HOST }}
       DO_PORT: ${{ secrets.DO_PORT }}
       DO_USER: ${{ secrets.DO_USER }}
@@ -283,6 +310,20 @@ jobs:
           printf '%s\n' '${{ secrets.DO_SSH_KEY }}' > ~/.ssh/digitalocean
           chmod 600 ~/.ssh/digitalocean
           ssh-keyscan -p "${DO_PORT:-22}" "$DO_HOST_RESOLVED" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Resolve backend URL
+        run: |
+          if [ "$TARGET_ENV" = "production" ]; then
+            API_URL="${{ secrets.BACKEND_URL }}"
+            if [ -z "$API_URL" ]; then
+              API_URL="https://server.shohojhisab.com"
+              echo "::warning::BACKEND_URL secret is empty — using default production API URL."
+            fi
+          else
+            API_URL="${{ secrets.BACKEND_URL_STAGING }}"
+            [ -n "$API_URL" ] || API_URL="${{ secrets.BACKEND_URL }}"
+          fi
+          echo "BACKEND_URL_RESOLVED=$API_URL" >> "$GITHUB_ENV"
 
       - name: Rollback to previous commit
         run: |
