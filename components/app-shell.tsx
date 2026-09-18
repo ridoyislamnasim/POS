@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useMe } from "@/lib/auth";
 import { AppSidebar } from "@/components/layout/app-sidebar";
@@ -44,6 +45,7 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
   const path = usePathname();
   const router = useRouter();
   const { me, can, isLoading } = useMe();
+  const qc = useQueryClient();
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
   const [{ collapsed, isDesktop }, setLayout] = useState(initialShellLayout);
@@ -85,8 +87,12 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
       toastSuccess("Signed out");
     } catch (e) {
       toastError(e, "Could not sign out");
+    } finally {
+      // Always drop cached identity so a stale platform/tenant session
+      // can never linger behind after signing out.
+      qc.removeQueries({ queryKey: ["me"] });
+      router.push("/login");
     }
-    router.push("/login");
   }
 
   function toggleCollapse() {
