@@ -174,34 +174,84 @@ jobs:
     environment: ${{ needs.resolve-env.outputs.environment }}
     env:
       TARGET_ENV: ${{ needs.resolve-env.outputs.environment }}
-      FRONTEND_URL_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.FRONTEND_URL || secrets.FRONTEND_URL_STAGING || secrets.FRONTEND_URL }}
-      DO_HOST_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.DO_HOST || secrets.DO_HOST_STAGING || secrets.DO_HOST }}
       DO_PORT: ${{ secrets.DO_PORT }}
       DO_USER: ${{ secrets.DO_USER }}
     steps:
-      - name: Resolve backend URL
+      # Resolve every environment-specific value in plain shell and publish a
+      # SET/MISSING + source table to the job summary BEFORE validation, so a
+      # missing secret is always diagnosable — even when this job then fails.
+      # Secret VALUES are never printed, only names and SET/MISSING status.
+      # Secret names and production defaults come from SECRETS.md.
+      - name: Resolve deployment configuration
         run: |
+          status_of() { if [ -n "$1" ]; then echo "SET"; else echo "MISSING"; fi; }
+
           if [ "$TARGET_ENV" = "production" ]; then
-            API_URL="${{ secrets.BACKEND_URL }}"
-            if [ -z "$API_URL" ]; then
-              API_URL="https://server.shohojhisab.com"
-              echo "::warning::BACKEND_URL secret is empty — using default production API URL."
+            BACKEND_URL_RESOLVED="${{ secrets.BACKEND_URL }}"
+            BACKEND_SRC="BACKEND_URL"
+            if [ -z "$BACKEND_URL_RESOLVED" ]; then
+              BACKEND_URL_RESOLVED="https://server.shohojhisab.com"
+              BACKEND_SRC="DEFAULT"
+              echo "::warning::BACKEND_URL secret is empty — using default production backend URL."
             fi
+            FRONTEND_URL_RESOLVED="${{ secrets.FRONTEND_URL }}"
+            FRONTEND_SRC="FRONTEND_URL"
+            if [ -z "$FRONTEND_URL_RESOLVED" ]; then
+              FRONTEND_URL_RESOLVED="https://shohojhisab.com"
+              FRONTEND_SRC="DEFAULT"
+              echo "::warning::FRONTEND_URL secret is empty — using default production frontend URL."
+            fi
+            DO_HOST_RESOLVED="${{ secrets.DO_HOST }}"
+            DO_HOST_SRC="DO_HOST"
           else
-            API_URL="${{ secrets.BACKEND_URL_STAGING }}"
-            [ -n "$API_URL" ] || API_URL="${{ secrets.BACKEND_URL }}"
+            BACKEND_URL_RESOLVED="${{ secrets.BACKEND_URL_STAGING }}"
+            BACKEND_SRC="BACKEND_URL_STAGING"
+            [ -n "$BACKEND_URL_RESOLVED" ] || { BACKEND_URL_RESOLVED="${{ secrets.BACKEND_URL }}"; BACKEND_SRC="BACKEND_URL"; }
+            FRONTEND_URL_RESOLVED="${{ secrets.FRONTEND_URL_STAGING }}"
+            FRONTEND_SRC="FRONTEND_URL_STAGING"
+            [ -n "$FRONTEND_URL_RESOLVED" ] || { FRONTEND_URL_RESOLVED="${{ secrets.FRONTEND_URL }}"; FRONTEND_SRC="FRONTEND_URL"; }
+            DO_HOST_RESOLVED="${{ secrets.DO_HOST_STAGING }}"
+            DO_HOST_SRC="DO_HOST_STAGING"
+            [ -n "$DO_HOST_RESOLVED" ] || { DO_HOST_RESOLVED="${{ secrets.DO_HOST }}"; DO_HOST_SRC="DO_HOST"; }
           fi
-          echo "BACKEND_URL_RESOLVED=$API_URL" >> "$GITHUB_ENV"
+
+          {
+            echo "BACKEND_URL_RESOLVED=$BACKEND_URL_RESOLVED"
+            echo "FRONTEND_URL_RESOLVED=$FRONTEND_URL_RESOLVED"
+            echo "DO_HOST_RESOLVED=$DO_HOST_RESOLVED"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "## Deployment Configuration ($TARGET_ENV)"
+            echo ""
+            echo "| Configuration | Status | Source |"
+            echo "| ------------- | ------ | ------ |"
+            echo "| TARGET_ENV | $(status_of "$TARGET_ENV") | resolve-env |"
+            echo "| BACKEND_URL | $(status_of "$BACKEND_URL_RESOLVED") | $BACKEND_SRC |"
+            echo "| FRONTEND_URL | $(status_of "$FRONTEND_URL_RESOLVED") | $FRONTEND_SRC |"
+            echo "| DO_HOST | $(status_of "$DO_HOST_RESOLVED") | $DO_HOST_SRC |"
+            echo "| DO_PORT | $(status_of "$DO_PORT") | DO_PORT |"
+            echo "| DO_USER | $(status_of "$DO_USER") | DO_USER |"
+            echo "| DO_SSH_KEY | $(status_of "${{ secrets.DO_SSH_KEY }}") | DO_SSH_KEY |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Validate secrets
         run: |
           MISSING=""
-          [ -n "$BACKEND_URL_RESOLVED" ]  || MISSING="$MISSING BACKEND_URL(_STAGING)"
-          [ -n "$FRONTEND_URL_RESOLVED" ] || MISSING="$MISSING FRONTEND_URL(_STAGING)"
-          [ -n "$DO_HOST_RESOLVED" ]      || MISSING="$MISSING DO_HOST(_STAGING)"
+          if [ "$TARGET_ENV" = "production" ]; then
+            [ -n "$BACKEND_URL_RESOLVED" ]  || MISSING="$MISSING BACKEND_URL"
+            [ -n "$FRONTEND_URL_RESOLVED" ] || MISSING="$MISSING FRONTEND_URL"
+            [ -n "$DO_HOST_RESOLVED" ]      || MISSING="$MISSING DO_HOST"
+          else
+            [ -n "$BACKEND_URL_RESOLVED" ]  || MISSING="$MISSING BACKEND_URL_STAGING"
+            [ -n "$FRONTEND_URL_RESOLVED" ] || MISSING="$MISSING FRONTEND_URL_STAGING"
+            [ -n "$DO_HOST_RESOLVED" ]      || MISSING="$MISSING DO_HOST_STAGING"
+          fi
+          [ -n "$DO_PORT" ] || MISSING="$MISSING DO_PORT"
+          [ -n "$DO_USER" ] || MISSING="$MISSING DO_USER"
           [ -n "${{ secrets.DO_SSH_KEY }}" ] || MISSING="$MISSING DO_SSH_KEY"
           if [ -n "$MISSING" ]; then
-            echo "::error::Missing GitHub secrets:$MISSING (Settings → Secrets and variables → Actions)"
+            echo "::error::Missing GitHub secrets for $TARGET_ENV:$MISSING (Settings → Secrets and variables → Actions)"
             exit 1
           fi
           echo "Secrets OK for environment: $TARGET_ENV"
@@ -299,10 +349,62 @@ jobs:
     environment: ${{ needs.resolve-env.outputs.environment }}
     env:
       TARGET_ENV: ${{ needs.resolve-env.outputs.environment }}
-      DO_HOST_RESOLVED: ${{ needs.resolve-env.outputs.environment == 'production' && secrets.DO_HOST || secrets.DO_HOST_STAGING || secrets.DO_HOST }}
       DO_PORT: ${{ secrets.DO_PORT }}
       DO_USER: ${{ secrets.DO_USER }}
     steps:
+      - name: Resolve deployment configuration
+        run: |
+          status_of() { if [ -n "$1" ]; then echo "SET"; else echo "MISSING"; fi; }
+
+          if [ "$TARGET_ENV" = "production" ]; then
+            BACKEND_URL_RESOLVED="${{ secrets.BACKEND_URL }}"
+            BACKEND_SRC="BACKEND_URL"
+            if [ -z "$BACKEND_URL_RESOLVED" ]; then
+              BACKEND_URL_RESOLVED="https://server.shohojhisab.com"
+              BACKEND_SRC="DEFAULT"
+              echo "::warning::BACKEND_URL secret is empty — using default production backend URL."
+            fi
+            FRONTEND_URL_RESOLVED="${{ secrets.FRONTEND_URL }}"
+            FRONTEND_SRC="FRONTEND_URL"
+            if [ -z "$FRONTEND_URL_RESOLVED" ]; then
+              FRONTEND_URL_RESOLVED="https://shohojhisab.com"
+              FRONTEND_SRC="DEFAULT"
+              echo "::warning::FRONTEND_URL secret is empty — using default production frontend URL."
+            fi
+            DO_HOST_RESOLVED="${{ secrets.DO_HOST }}"
+            DO_HOST_SRC="DO_HOST"
+          else
+            BACKEND_URL_RESOLVED="${{ secrets.BACKEND_URL_STAGING }}"
+            BACKEND_SRC="BACKEND_URL_STAGING"
+            [ -n "$BACKEND_URL_RESOLVED" ] || { BACKEND_URL_RESOLVED="${{ secrets.BACKEND_URL }}"; BACKEND_SRC="BACKEND_URL"; }
+            FRONTEND_URL_RESOLVED="${{ secrets.FRONTEND_URL_STAGING }}"
+            FRONTEND_SRC="FRONTEND_URL_STAGING"
+            [ -n "$FRONTEND_URL_RESOLVED" ] || { FRONTEND_URL_RESOLVED="${{ secrets.FRONTEND_URL }}"; FRONTEND_SRC="FRONTEND_URL"; }
+            DO_HOST_RESOLVED="${{ secrets.DO_HOST_STAGING }}"
+            DO_HOST_SRC="DO_HOST_STAGING"
+            [ -n "$DO_HOST_RESOLVED" ] || { DO_HOST_RESOLVED="${{ secrets.DO_HOST }}"; DO_HOST_SRC="DO_HOST"; }
+          fi
+
+          {
+            echo "BACKEND_URL_RESOLVED=$BACKEND_URL_RESOLVED"
+            echo "FRONTEND_URL_RESOLVED=$FRONTEND_URL_RESOLVED"
+            echo "DO_HOST_RESOLVED=$DO_HOST_RESOLVED"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "## Deployment Configuration ($TARGET_ENV)"
+            echo ""
+            echo "| Configuration | Status | Source |"
+            echo "| ------------- | ------ | ------ |"
+            echo "| TARGET_ENV | $(status_of "$TARGET_ENV") | resolve-env |"
+            echo "| BACKEND_URL | $(status_of "$BACKEND_URL_RESOLVED") | $BACKEND_SRC |"
+            echo "| FRONTEND_URL | $(status_of "$FRONTEND_URL_RESOLVED") | $FRONTEND_SRC |"
+            echo "| DO_HOST | $(status_of "$DO_HOST_RESOLVED") | $DO_HOST_SRC |"
+            echo "| DO_PORT | $(status_of "$DO_PORT") | DO_PORT |"
+            echo "| DO_USER | $(status_of "$DO_USER") | DO_USER |"
+            echo "| DO_SSH_KEY | $(status_of "${{ secrets.DO_SSH_KEY }}") | DO_SSH_KEY |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -310,20 +412,6 @@ jobs:
           printf '%s\n' '${{ secrets.DO_SSH_KEY }}' > ~/.ssh/digitalocean
           chmod 600 ~/.ssh/digitalocean
           ssh-keyscan -p "${DO_PORT:-22}" "$DO_HOST_RESOLVED" >> ~/.ssh/known_hosts 2>/dev/null || true
-
-      - name: Resolve backend URL
-        run: |
-          if [ "$TARGET_ENV" = "production" ]; then
-            API_URL="${{ secrets.BACKEND_URL }}"
-            if [ -z "$API_URL" ]; then
-              API_URL="https://server.shohojhisab.com"
-              echo "::warning::BACKEND_URL secret is empty — using default production API URL."
-            fi
-          else
-            API_URL="${{ secrets.BACKEND_URL_STAGING }}"
-            [ -n "$API_URL" ] || API_URL="${{ secrets.BACKEND_URL }}"
-          fi
-          echo "BACKEND_URL_RESOLVED=$API_URL" >> "$GITHUB_ENV"
 
       - name: Rollback to previous commit
         run: |
