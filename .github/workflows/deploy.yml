@@ -262,6 +262,9 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' '${{ secrets.DO_SSH_KEY }}' > ~/.ssh/digitalocean
           chmod 600 ~/.ssh/digitalocean
+          # ssh-keyscan is best-effort: it pre-populates known_hosts so the next
+          # step can SSH non-interactively. If it fails, the ssh step itself will
+          # fail loudly — this line is intentionally non-fatal.
           ssh-keyscan -p "${DO_PORT:-22}" "$DO_HOST_RESOLVED" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy to droplet
@@ -292,8 +295,8 @@ jobs:
           if git cat-file -e "$GIT_SHA^{commit}" 2>/dev/null; then
             git reset --hard "$GIT_SHA"
           else
-            echo "SHA $GIT_SHA not found on droplet — deploying origin/$BRANCH instead."
-            git reset --hard "origin/$BRANCH"
+            echo "::error::SHA $GIT_SHA not found on the droplet — aborting deploy instead of falling back to origin/$BRANCH."
+            exit 1
           fi
 
           export NVM_DIR="$HOME/.nvm"
@@ -301,8 +304,8 @@ jobs:
             # shellcheck disable=SC1091
             . "$NVM_DIR/nvm.sh"
           fi
-          corepack enable || true
-          corepack prepare pnpm@9 --activate || true
+          corepack enable
+          corepack prepare pnpm@9 --activate
 
           pnpm install --frozen-lockfile
 
@@ -317,28 +320,52 @@ jobs:
             pm2 restart "$PM2_NAME" --update-env
           else
             if [ "$TARGET_ENV" = "production" ]; then
-              pm2 start pnpm --name "$PM2_NAME" -- start
+              pm2 start pnpm --name "$PM2_NAME" -- exec next start --port 3020
             else
               pm2 start pnpm --name "$PM2_NAME" -- exec next start --port 3021
             fi
           fi
-          pm2 save || true
+          pm2 save
           pm2 list
           REMOTE_EOF
 
       - name: Verify deployment
         run: |
           echo "Waiting for $FRONTEND_URL_RESOLVED ..."
+          VERIFIED=""
           for i in 1 2 3 4 5 6; do
             if curl -fsS --max-time 10 "$FRONTEND_URL_RESOLVED" >/dev/null; then
               echo "Frontend healthy at $FRONTEND_URL_RESOLVED"
-              exit 0
+              VERIFIED="yes"
+              break
             fi
             echo "Attempt $i/6 not ready yet, retrying in 10s..."
             sleep 10
           done
-          echo "::error::Frontend not reachable at $FRONTEND_URL_RESOLVED after 60s"
-          exit 1
+          if [ -z "$VERIFIED" ]; then
+            echo "::error::Frontend not reachable at $FRONTEND_URL_RESOLVED after 60s"
+            exit 1
+          fi
+
+          # Only a SUCCESSFULLY VERIFIED deployment may update the marker.
+          # .deployed-sha = last verified OK; .deployed-sha.prev = the one before.
+          ssh -i ~/.ssh/digitalocean -p "${DO_PORT:-22}" \
+            "$DO_USER@$DO_HOST_RESOLVED" \
+            "TARGET_ENV='$TARGET_ENV' GIT_SHA='${{ github.sha }}' bash -s" <<'REMOTE_EOF'
+          set -euo pipefail
+
+          if [ "$TARGET_ENV" = "production" ]; then
+            APP_DIR="$HOME/pos/POS"
+          else
+            APP_DIR="$HOME/pos/POS-staging"
+          fi
+          PREV_SHA="$(cat "$APP_DIR/.deployed-sha" 2>/dev/null || true)"
+          if [ -n "$PREV_SHA" ] && [ "$PREV_SHA" != "$GIT_SHA" ]; then
+            echo "$PREV_SHA" > "$APP_DIR/.deployed-sha.prev"
+          fi
+          echo "$GIT_SHA" > "$APP_DIR/.deployed-sha"
+          echo "Recorded $GIT_SHA as last verified deployment."
+          REMOTE_EOF
 
   # ── Rollback (manual only) ────────────────────────────────────
   rollback:
@@ -411,13 +438,16 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' '${{ secrets.DO_SSH_KEY }}' > ~/.ssh/digitalocean
           chmod 600 ~/.ssh/digitalocean
+          # ssh-keyscan is best-effort: it pre-populates known_hosts so the next
+          # step can SSH non-interactively. If it fails, the ssh step itself will
+          # fail loudly — this line is intentionally non-fatal.
           ssh-keyscan -p "${DO_PORT:-22}" "$DO_HOST_RESOLVED" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Rollback to previous commit
         run: |
           ssh -i ~/.ssh/digitalocean -p "${DO_PORT:-22}" \
             "$DO_USER@$DO_HOST_RESOLVED" \
-            "TARGET_ENV='$TARGET_ENV' BACKEND_URL_RESOLVED='$BACKEND_URL_RESOLVED' bash -s" <<'REMOTE_EOF'
+            "TARGET_ENV='$TARGET_ENV' BACKEND_URL_RESOLVED='$BACKEND_URL_RESOLVED' FRONTEND_URL_RESOLVED='$FRONTEND_URL_RESOLVED' bash -s" <<'REMOTE_EOF'
           set -euo pipefail
 
           if [ "$TARGET_ENV" = "production" ]; then
@@ -429,8 +459,12 @@ jobs:
           fi
           cd "$APP_DIR"
 
-          PREV_SHA="$(git rev-parse HEAD~1)"
-          echo "Rolling back to $PREV_SHA ..."
+          PREV_SHA="$(cat "$APP_DIR/.deployed-sha.prev" 2>/dev/null || true)"
+          if [ -z "$PREV_SHA" ] || ! git cat-file -e "$PREV_SHA^{commit}" 2>/dev/null; then
+            echo "::error::No recorded previously-successful deployment SHA at $APP_DIR/.deployed-sha.prev — refusing to guess (HEAD~1 is not a safe rollback target)."
+            exit 1
+          fi
+          echo "Rolling back to previously-successful SHA $PREV_SHA ..."
           git reset --hard "$PREV_SHA"
 
           export NVM_DIR="$HOME/.nvm"
@@ -438,8 +472,8 @@ jobs:
             # shellcheck disable=SC1091
             . "$NVM_DIR/nvm.sh"
           fi
-          corepack enable || true
-          corepack prepare pnpm@9 --activate || true
+          corepack enable
+          corepack prepare pnpm@9 --activate
 
           pnpm install --frozen-lockfile
           export NEXT_PUBLIC_APP_ENV="production"
@@ -447,7 +481,25 @@ jobs:
           export NODE_OPTIONS="--max-old-space-size=1536"
           pnpm build
           pm2 restart "$PM2_NAME" --update-env
-          pm2 save || true
+          pm2 save
+          # Wait for the frontend to come back on the rolled-back build before
+          # declaring success or updating the deployment marker.
+          VERIFIED=""
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 10 "$FRONTEND_URL_RESOLVED" >/dev/null; then
+              VERIFIED="yes"
+              break
+            fi
+            echo "Attempt $i/6 not ready yet, retrying in 10s..."
+            sleep 10
+          done
+          if [ -z "$VERIFIED" ]; then
+            echo "::error::Frontend not reachable at $FRONTEND_URL_RESOLVED after rollback — NOT updating deployment marker."
+            exit 1
+          fi
+          # Rollback verified — record it as the current deployment.
+          echo "$PREV_SHA" > "$APP_DIR/.deployed-sha"
+          rm -f "$APP_DIR/.deployed-sha.prev"
           echo "Rolled back to $PREV_SHA"
           REMOTE_EOF
 

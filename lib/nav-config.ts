@@ -162,7 +162,7 @@ export const NAV_GROUPS: NavGroup[] = [
     tone: "stone",
     items: [
       { title: "Employees", href: "/users", icon: Users, permission: "user.manage" },
-      { title: "Roles & Permissions", href: "/roles", icon: Shield, permission: "user.manage" },
+      { title: "Roles & Permissions", href: "/roles", icon: Shield, permission: null, platformOnly: true },
       { title: "Attendance", href: "/attendance", icon: UserCog, permission: "staff.view" },
       { title: "Shift Management", href: "/shifts", icon: ClipboardList, permission: "shift.manage" },
       { title: "Audit Log", href: "/audit", icon: ScrollText, permission: "audit.view" },
