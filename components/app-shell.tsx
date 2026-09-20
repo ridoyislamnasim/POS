@@ -81,21 +81,27 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
-  async function signOut() {
-    try {
-      await api("/api/v1/auth/logout", { method: "POST" });
-      toastSuccess("Signed out");
-    } catch (e) {
-      toastError(e, "Could not sign out");
-    } finally {
-      // Always drop cached identity so a stale platform/tenant session
-      // can never linger behind after signing out.
-      qc.removeQueries({ queryKey: ["me"] });
-      router.push("/login");
-    }
-  }
+async function signOut() {
+     try {
+       await api("/api/v1/auth/logout", { method: "POST" });
+       toastSuccess("Signed out");
+     } catch (e) {
+       toastError(e, "Could not sign out");
+     } finally {
+       qc.removeQueries({ queryKey: ["me"] });
+       router.push("/login");
+     }
+   }
 
-  function toggleCollapse() {
+   function navigateToProfile() {
+     router.push("/profile");
+   }
+
+   function navigateToChangePassword() {
+     router.push("/profile");
+   }
+
+   function toggleCollapse() {
     setLayout((cur) => {
       const next = !cur.collapsed;
       window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
@@ -127,16 +133,18 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
         animate={{ left: mainOffset }}
         transition={layoutTransition}
       >
-        <AppTopBar
-          path={path}
-          userName={me?.name}
-          branches={me?.branches ?? []}
-          canNotify={can("notification.view")}
-          collapsed={collapsed}
-          onMenu={() => setOpen((v) => !v)}
-          onToggleCollapse={toggleCollapse}
-          onSignOut={signOut}
-        />
+<AppTopBar
+           path={path}
+           userName={me?.name}
+           branches={me?.branches ?? []}
+           canNotify={can("notification.view")}
+           collapsed={collapsed}
+           onMenu={() => setOpen((v) => !v)}
+           onToggleCollapse={toggleCollapse}
+           onSignOut={signOut}
+           onProfile={navigateToProfile}
+           onChangePassword={navigateToChangePassword}
+         />
       </motion.div>
       <motion.div
         className="flex h-full flex-col pt-12 print:h-auto print:pt-0"
