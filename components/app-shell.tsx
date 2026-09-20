@@ -48,7 +48,11 @@ export function AppShell({ children, pos }: { children: React.ReactNode; pos?: b
   const qc = useQueryClient();
   const reduceMotion = useReducedMotion();
   const [open, setOpen] = useState(false);
-  const [{ collapsed, isDesktop }, setLayout] = useState(initialShellLayout);
+  // SSR-first init: initialShellLayout() reads window/localStorage, which would
+  // make the first client render differ from the server HTML (hydration
+  // mismatch). Start from the SSR defaults; the layout effect below syncs the
+  // saved/viewport values after mount, before paint.
+  const [{ collapsed, isDesktop }, setLayout] = useState({ collapsed: false, isDesktop: true });
   const layoutTransition = reduceMotion ? { duration: 0 } : sidebarTransition;
 
   useLayoutEffect(() => {

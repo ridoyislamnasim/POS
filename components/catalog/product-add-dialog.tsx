@@ -25,6 +25,9 @@ function emptyForm() {
     sizes: [] as string[],
     price: "0",
     cost: "0",
+    wholesalePrice: "",
+    retailPrice: "",
+    discount: "0",
     opening: {} as Record<string, string>,
   };
 }
@@ -55,6 +58,9 @@ export function ProductAddDialog({ open, onClose }: { open: boolean; onClose: ()
 
   const save = useMutation({
     mutationFn: async () => {
+      const retail = Number(form.retailPrice || 0);
+      const disc = Number(form.discount || 0);
+      const finalPrice = retail > 0 ? (retail - (retail * disc / 100)).toFixed(2) : "0";
       const product = await api<{ id: string }>("/api/v1/catalog/products", {
         method: "POST",
         body: JSON.stringify({
@@ -62,6 +68,9 @@ export function ProductAddDialog({ open, onClose }: { open: boolean; onClose: ()
           code: form.code,
           category: form.category,
           taxCategoryId: form.taxCategoryId || undefined,
+          retailPrice: form.retailPrice || undefined,
+          wholesalePrice: form.wholesalePrice || undefined,
+          discount: form.discount,
         }),
       });
       if (form.colours.length && form.sizes.length) {
@@ -70,8 +79,9 @@ export function ProductAddDialog({ open, onClose }: { open: boolean; onClose: ()
           body: JSON.stringify({
             colourOptionIds: form.colours,
             sizeOptionIds: form.sizes,
-            price: form.price,
+            price: finalPrice,
             cost: form.cost,
+            discount: form.discount,
             openingStock: Object.entries(form.opening).map(([locationId, quantity]) => ({ locationId, quantity })),
           }),
         });
@@ -98,6 +108,18 @@ export function ProductAddDialog({ open, onClose }: { open: boolean; onClose: ()
   function submit() {
     if (!form.name.trim() || !form.code.trim()) {
       toastWarn("Name and code are required");
+      return;
+    }
+    if (!form.cost || Number(form.cost) < 0) {
+      toastWarn("Cost Price is required");
+      return;
+    }
+    if (!form.retailPrice || Number(form.retailPrice) < 0) {
+      toastWarn("Retail Price is required");
+      return;
+    }
+    if (!form.wholesalePrice || Number(form.wholesalePrice) < 0) {
+      toastWarn("Wholesale Price is required");
       return;
     }
     save.mutate();
@@ -215,18 +237,48 @@ export function ProductAddDialog({ open, onClose }: { open: boolean; onClose: ()
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Price & opening stock</h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Price">
+          <Field label="Retail Price">
             <input
               className={inputClass}
-              value={form.price}
-              onChange={(e) => setForm((s) => ({ ...s, price: e.target.value }))}
+              value={form.retailPrice}
+              onChange={(e) => setForm((s) => ({ ...s, retailPrice: e.target.value }))}
+              placeholder="Enter retail price"
             />
           </Field>
+          <Field label="Discount %">
+            <input
+              className={inputClass}
+              value={form.discount}
+              onChange={(e) => setForm((s) => ({ ...s, discount: e.target.value }))}
+              type="number"
+              min="0"
+              max="100"
+              placeholder="0"
+            />
+          </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Cost">
             <input
               className={inputClass}
               value={form.cost}
               onChange={(e) => setForm((s) => ({ ...s, cost: e.target.value }))}
+              placeholder="Enter purchase / cost price"
+            />
+          </Field>
+          <Field label="Wholesale">
+            <input
+              className={inputClass}
+              value={form.wholesalePrice}
+              onChange={(e) => setForm((s) => ({ ...s, wholesalePrice: e.target.value }))}
+              placeholder="Enter wholesale price"
+            />
+          </Field>
+          <Field label="Final Price (calc)">
+            <input
+              className={inputClass}
+              value={Number(form.retailPrice || 0) > 0 ? (Number(form.retailPrice) - (Number(form.retailPrice) * Number(form.discount || 0) / 100)).toFixed(2) : "0"}
+              readOnly
             />
           </Field>
         </div>

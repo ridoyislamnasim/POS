@@ -7,7 +7,7 @@ import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState, ErrorState, PageHeader, SearchInput, TablePagination, btnGhost, btnPrimary, inputClass } from "@/components/ui";
-import { toastCreated, toastDeleted, toastError, toastUpdated } from "@/lib/toast";
+import { toastCreated, toastDeleted, toastError, toastUpdated, getApiErrorMessage } from "@/lib/toast";
 
 type Attr = {
   id: string;
@@ -65,18 +65,23 @@ export default function AttributesPage() {
   return (
     <AppShell>
       <PageHeader title="Variant attributes" description="Colour, size, weight, volume, or any custom axis. Used when generating product combinations." />
-      <form
-        className="mb-4 flex max-w-lg gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) create.mutate();
-        }}
-      >
-        <input className={inputClass} placeholder="New attribute (e.g. Capacity)" value={name} onChange={(e) => setName(e.target.value)} />
-        <button type="submit" className={btnPrimary} disabled={create.isPending}>
-          Add attribute
-        </button>
-      </form>
+      <div className="mb-4 max-w-lg">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) create.mutate();
+          }}
+        >
+          <input className={inputClass} placeholder="New attribute (e.g. Capacity)" value={name} onChange={(e) => setName(e.target.value)} />
+          <button type="submit" className={btnPrimary} disabled={!name.trim() || create.isPending}>
+            Add attribute
+          </button>
+        </form>
+        {create.isError ? (
+          <p className="mt-1.5 text-xs text-destructive">{getApiErrorMessage(create.error, "Could not create attribute.")}</p>
+        ) : null}
+      </div>
       <div className="mb-3">
         <SearchInput value={list.draft} onChange={list.setDraft} placeholder="Search attributes" loading={list.searching || (list.isFetching && !list.isLoading)} />
       </div>

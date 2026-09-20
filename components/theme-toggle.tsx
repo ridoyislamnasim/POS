@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Moon, Sun, Monitor } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
@@ -17,11 +18,22 @@ const OPTIONS: { value: ThemePreference; label: string; hint: string; icon: type
 export function ThemeToggle() {
   const { preference, setPreference } = useTheme();
   const reduce = useReducedMotion();
+  // Mounted gate (same pattern as dashboard-home): the stored preference lives
+  // in localStorage and is only known after mount, while the server always
+  // renders ThemeProvider's initial "system" state. Render that deterministic
+  // SSR fallback until mounted so server HTML and the first client render are
+  // identical — otherwise React reports a hydration mismatch and the page
+  // renders dead (no clicks, no toasts, no dialogs).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const current = mounted ? preference : "system";
   return (
     <div className="inline-flex h-8 items-center rounded-full border bg-background p-0.5" role="group" aria-label="Theme">
       {OPTIONS.map((opt) => {
         const Icon = opt.icon;
-        const active = preference === opt.value;
+        const active = current === opt.value;
         return (
           <ActionTooltip key={opt.value} label={opt.label} description={opt.hint} side="bottom">
             <Button
@@ -33,7 +45,7 @@ export function ThemeToggle() {
               aria-label={opt.label}
               aria-pressed={active}
             >
-              {active ? (
+              {active && mounted ? (
                 <motion.span
                   layoutId={reduce ? undefined : "theme-pill"}
                   className="absolute inset-0 rounded-full bg-highlight/20"

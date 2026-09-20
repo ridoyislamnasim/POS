@@ -102,6 +102,12 @@ function emptyOpening(locs: Loc[]) {
   return Object.fromEntries(locs.map((l) => [l.id, "0"]));
 }
 
+function calcFinalSellingPrice(retailPrice: string, discount: string): string {
+  const retail = Number(retailPrice || 0);
+  const disc = Number(discount || 0);
+  return (retail > 0 ? retail - (retail * disc / 100) : 0).toFixed(2);
+}
+
 export function ProductForm({ product }: { product?: ProductLoaded }) {
   const router = useRouter();
   const isEdit = Boolean(product);
@@ -116,6 +122,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [dropVariant, setDropVariant] = useState<string | null>(null);
   const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
+  const initialSellingPrice = product?.sellingPrice ?? calcFinalSellingPrice(product?.retailPrice ?? "", product?.discount ?? "0");
   const [form, setForm] = useState(() => ({
     name: product?.name ?? "",
     code: product?.code ?? "",
@@ -139,7 +146,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
     expiryTracking: Boolean(product?.expiryTracking),
     batchTracking: Boolean(product?.batchTracking),
     serialTracking: Boolean(product?.serialTracking),
-    sellingPrice: product?.sellingPrice ?? product?.variants?.[0]?.price ?? "0",
+    sellingPrice: initialSellingPrice,
     purchasePrice: product?.purchasePrice ?? product?.variants?.[0]?.cost ?? "0",
     wholesalePrice: product?.wholesalePrice ?? "",
     retailPrice: product?.retailPrice ?? "",
@@ -164,9 +171,13 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
     [cats.data, form.categoryId],
   );
 
-  const sell = Number(form.sellingPrice || 0);
-  const cost = Number(form.purchasePrice || 0);
-  const margin = sell > 0 ? (((sell - cost) / sell) * 100).toFixed(1) : "0";
+const sell = Number(form.retailPrice || 0);
+const cost = Number(form.purchasePrice || 0);
+const discountPercent = Number(form.discount || 0);
+const finalSellingPrice = sell > 0 ? sell - (sell * discountPercent / 100) : 0;
+const profit = finalSellingPrice - cost;
+const profitMargin = finalSellingPrice > 0 ? ((profit / finalSellingPrice) * 100).toFixed(1) : "0";
+const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((s) => ({ ...s, [key]: value }));
@@ -206,7 +217,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
         label: combo.map((o) => o.label).join(" / "),
         sku: `${form.code || "SKU"}-${combo.map((o) => o.value).join("-")}`.toUpperCase(),
         barcode: "",
-        price: form.sellingPrice,
+        price: calcFinalSellingPrice(form.retailPrice, form.discount),
         cost: form.purchasePrice,
         discount: form.discount,
         minStock: form.minStock,
@@ -221,10 +232,44 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
 
   const save = useMutation({
     mutationFn: async () => {
+      const finalSellingPriceNum = Number(calcFinalSellingPrice(form.retailPrice, form.discount));
+      const cost = Number(form.purchasePrice || 0);
+      const profit = finalSellingPriceNum - cost;
+      const calculatedProfitMargin = finalSellingPriceNum > 0 ? ((profit / finalSellingPriceNum) * 100).toFixed(1) : "0";
       const nextErrors: Record<string, string> = {};
+      const isNonNegativeNum = (v: unknown) => {
+        const s = typeof v === "string" ? v.trim() : String(v ?? "");
+        if (s === "") return false;
+        const n = Number(s);
+        return !isNaN(n) && isFinite(n) && n >= 0;
+      };
+      const isNonNegativeNumOrEmpty = (v: unknown) => {
+        const s = typeof v === "string" ? v.trim() : String(v ?? "");
+        if (s === "") return true;
+        const n = Number(s);
+        return !isNaN(n) && isFinite(n) && n >= 0;
+      };
       if (!form.name.trim()) nextErrors.name = "Product name is required";
       if (!form.code.trim()) nextErrors.code = "Product code / SKU is required";
       if (!form.categoryId) nextErrors.categoryId = "Category is required";
+      if (!isNonNegativeNum(form.purchasePrice)) nextErrors.purchasePrice = "Purchase / Cost Price must be a positive number (≥ 0)";
+      if (!isNonNegativeNum(form.wholesalePrice)) nextErrors.wholesalePrice = "Wholesale Price must be a positive number (≥ 0)";
+      if (!isNonNegativeNum(form.retailPrice)) nextErrors.retailPrice = "Retail Price must be a positive number (≥ 0)";
+      if (!isNonNegativeNumOrEmpty(form.minStock)) nextErrors.minStock = "Minimum stock must be a positive number (≥ 0)";
+      if (!isNonNegativeNumOrEmpty(form.reorderLevel)) nextErrors.reorderLevel = "Reorder level must be a positive number (≥ 0)";
+      const badOpening = Object.entries(form.opening).find(([, q]) => !isNonNegativeNumOrEmpty(q));
+      if (badOpening) nextErrors.opening = "Opening qty must be a positive number (≥ 0)";
+      if (form.type === "VARIABLE") {
+        const badVariant = form.variants.find(
+          (v) =>
+            !isNonNegativeNumOrEmpty(v.price) ||
+            !isNonNegativeNumOrEmpty(v.cost) ||
+            !isNonNegativeNumOrEmpty(v.minStock) ||
+            Object.values(v.opening ?? {}).some((q) => !isNonNegativeNumOrEmpty(q)),
+        );
+        if (badVariant) nextErrors.variants = `Variant "${badVariant.label}" has a negative price, cost, min stock, or opening qty`;
+      }
+      if (Number(form.discount || 0) < 0 || Number(form.discount || 0) > 100) nextErrors.discount = "Discount must be between 0 and 100";
       if (form.type === "VARIABLE" && !form.variants.length) {
         nextErrors.variants = "Generate at least one variant combination, or switch to Simple";
       }
@@ -263,12 +308,12 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
         expiryTracking: form.expiryTracking,
         batchTracking: form.batchTracking,
         serialTracking: form.serialTracking,
-        sellingPrice: form.sellingPrice,
+        sellingPrice: finalSellingPriceNum,
         purchasePrice: form.purchasePrice,
         wholesalePrice: form.wholesalePrice || undefined,
         retailPrice: form.retailPrice || undefined,
         discount: form.discount,
-        profitMargin: form.profitMargin || margin,
+        profitMargin: calculatedProfitMargin,
         minStock: form.minStock,
         reorderLevel: form.reorderLevel,
         images: form.images,
@@ -279,7 +324,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
             ? {
                 sku: form.code,
                 barcode: form.barcode,
-                price: form.sellingPrice,
+                price: finalSellingPrice,
                 cost: form.purchasePrice,
                 discount: form.discount,
                 minStock: form.minStock,
@@ -398,13 +443,14 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
       <Section title="1. Basic Information">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Product name *" error={errors.name}>
-            <input className={inputClass} value={form.name} onChange={(e) => set("name", e.target.value)} />
+            <input className={inputClass} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Enter product name" />
           </Field>
           <Field label="Product code / SKU *" error={errors.code} hint={form.autoSku ? "Auto from name" : undefined}>
             <div className="flex gap-2">
               <input
                 className={inputClass}
                 value={form.code}
+                placeholder="Enter product code / SKU"
                 onChange={(e) => setForm((s) => ({ ...s, code: e.target.value, autoSku: false }))}
               />
               <button
@@ -448,7 +494,7 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
             <input className={inputClass} placeholder="comma separated" value={form.tags} onChange={(e) => set("tags", e.target.value)} />
           </Field>
           <Field label="Description">
-            <textarea className={inputClass + " min-h-[72px]"} value={form.description} onChange={(e) => set("description", e.target.value)} />
+            <textarea className={inputClass + " min-h-[72px]"} value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Enter product description" />
           </Field>
         </div>
       </Section>
@@ -614,19 +660,19 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
                         <input className={inputClass + " h-8 w-28"} value={v.barcode} onChange={(e) => patchVar(v.id, { barcode: e.target.value })} />
                       </td>
                       <td>
-                        <input className={inputClass + " h-8 w-20"} value={v.price} onChange={(e) => patchVar(v.id, { price: e.target.value })} />
+                        <input className={inputClass + " h-8 w-20"} value={v.price} onChange={(e) => patchVar(v.id, { price: e.target.value })} type="number" min="0" step="0.01" inputMode="decimal" />
                       </td>
                       <td>
-                        <input className={inputClass + " h-8 w-20"} value={v.cost} onChange={(e) => patchVar(v.id, { cost: e.target.value })} />
+                        <input className={inputClass + " h-8 w-20"} value={v.cost} onChange={(e) => patchVar(v.id, { cost: e.target.value })} type="number" min="0" step="0.01" inputMode="decimal" />
                       </td>
                       <td>
-                        <input className={inputClass + " h-8 w-16"} value={v.discount} onChange={(e) => patchVar(v.id, { discount: e.target.value })} />
+                        <input className={inputClass + " h-8 w-16"} value={v.discount} onChange={(e) => patchVar(v.id, { discount: e.target.value })} type="number" min="0" max="100" step="0.01" inputMode="decimal" />
                       </td>
                       <td>
-                        <input className={inputClass + " h-8 w-14"} value={v.minStock} onChange={(e) => patchVar(v.id, { minStock: e.target.value })} />
+                        <input className={inputClass + " h-8 w-14"} value={v.minStock} onChange={(e) => patchVar(v.id, { minStock: e.target.value })} type="number" min="0" step="1" inputMode="numeric" />
                       </td>
                       <td>
-                        <input className={inputClass + " h-8 w-14"} value={v.weight} onChange={(e) => patchVar(v.id, { weight: e.target.value })} />
+                        <input className={inputClass + " h-8 w-14"} value={v.weight} onChange={(e) => patchVar(v.id, { weight: e.target.value })} type="number" min="0" step="0.01" inputMode="decimal" />
                       </td>
                       <td>
                         <select className={inputClass + " h-8 w-24"} value={v.status} onChange={(e) => patchVar(v.id, { status: e.target.value as "ACTIVE" | "INACTIVE" })}>
@@ -642,6 +688,10 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
                             onChange={(e) =>
                               patchVar(v.id, { opening: { ...v.opening, [l.id]: e.target.value } })
                             }
+                            type="number"
+                            min="0"
+                            step="1"
+                            inputMode="numeric"
                           />
                         </td>
                       ))}
@@ -667,35 +717,36 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
         </Section>
       )}
 
-      <Section title="5. Pricing">
+<Section title="5. Pricing">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Selling price">
-            <input className={inputClass} value={form.sellingPrice} onChange={(e) => set("sellingPrice", e.target.value)} />
+          <Field label="Purchase / Cost Price *" error={errors.purchasePrice}>
+            <input className={inputClass} value={form.purchasePrice} onChange={(e) => set("purchasePrice", e.target.value)} placeholder="Enter purchase / cost price" type="number" min="0" step="0.01" inputMode="decimal" />
           </Field>
-          <Field label="Purchase / cost">
-            <input className={inputClass} value={form.purchasePrice} onChange={(e) => set("purchasePrice", e.target.value)} />
+          <Field label="Wholesale Price *" error={errors.wholesalePrice}>
+            <input className={inputClass} value={form.wholesalePrice} onChange={(e) => set("wholesalePrice", e.target.value)} placeholder="Enter wholesale price" type="number" min="0" step="0.01" inputMode="decimal" />
           </Field>
-          <Field label="Wholesale">
-            <input className={inputClass} value={form.wholesalePrice} onChange={(e) => set("wholesalePrice", e.target.value)} />
+          <Field label="Retail Price *" error={errors.retailPrice}>
+            <input className={inputClass} value={form.retailPrice} onChange={(e) => set("retailPrice", e.target.value)} placeholder="Enter retail price" type="number" min="0" step="0.01" inputMode="decimal" />
           </Field>
-          <Field label="Retail">
-            <input className={inputClass} value={form.retailPrice} onChange={(e) => set("retailPrice", e.target.value)} />
+          <Field label="Discount %">
+            <input className={inputClass} value={form.discount} onChange={(e) => set("discount", e.target.value)} type="number" min="0" max="100" />
+            {errors.discount ? <p className="text-xs text-destructive">{errors.discount}</p> : null}
           </Field>
-          <Field label="Discount">
-            <input className={inputClass} value={form.discount} onChange={(e) => set("discount", e.target.value)} />
+          <Field label="Final Selling Price">
+            <input className={inputClass} value={finalSellingPrice.toFixed(2)} readOnly />
           </Field>
-          <Field label="Profit margin %">
-            <input
-              className={inputClass}
-              value={form.profitMargin}
-              placeholder={margin}
-              onChange={(e) => set("profitMargin", e.target.value)}
-            />
+          <Field label="Profit / Loss">
+            <input className={inputClass} value={profit.toFixed(2)} readOnly style={{ color: profit < 0 ? "red" : profit > 0 ? "green" : "inherit" }} />
+            {profit < 0 ? <p className="text-xs text-destructive">Loss of {loss.toFixed(2)}</p> : null}
+          </Field>
+          <Field label="Profit Margin %">
+            <input className={inputClass} value={profitMargin} readOnly />
           </Field>
         </div>
       </Section>
 
       <Section title="6. Inventory">
+        {errors.opening ? <p className="mb-2 text-xs text-destructive">{errors.opening}</p> : null}
         {form.trackInventory ? (
           <div className="grid gap-3 sm:grid-cols-2">
             {locations.map((l) => (
@@ -704,14 +755,18 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
                   className={inputClass}
                   value={form.opening[l.id] ?? "0"}
                   onChange={(e) => setForm((s) => ({ ...s, opening: { ...s.opening, [l.id]: e.target.value } }))}
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
                 />
               </Field>
             ))}
-            <Field label="Minimum stock">
-              <input className={inputClass} value={form.minStock} onChange={(e) => set("minStock", e.target.value)} />
+            <Field label="Minimum stock" error={errors.minStock}>
+              <input className={inputClass} value={form.minStock} onChange={(e) => set("minStock", e.target.value)} type="number" min="0" step="1" inputMode="numeric" />
             </Field>
-            <Field label="Reorder / stock alert">
-              <input className={inputClass} value={form.reorderLevel} onChange={(e) => set("reorderLevel", e.target.value)} />
+            <Field label="Reorder / stock alert" error={errors.reorderLevel}>
+              <input className={inputClass} value={form.reorderLevel} onChange={(e) => set("reorderLevel", e.target.value)} type="number" min="0" step="1" inputMode="numeric" />
             </Field>
           </div>
         ) : (

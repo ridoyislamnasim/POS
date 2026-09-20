@@ -124,6 +124,7 @@ export function ResourcePage<T extends { id: string } = any>({
   statusOptions,
   dateFilter,
   summary,
+  headerActions,
 }: {
   title: string;
   description: string;
@@ -141,6 +142,7 @@ export function ResourcePage<T extends { id: string } = any>({
   statusOptions?: { value: string; label: string }[];
   dateFilter?: boolean;
   summary?: (ctx: { rows: T[]; total: number }) => SummaryItem[];
+  headerActions?: React.ReactNode;
 }) {
   const entity = entityName ?? guessEntity(title);
   const pathname = usePathname();
@@ -228,6 +230,7 @@ export function ResourcePage<T extends { id: string } = any>({
   return (
     <AppShell>
       <PageHeader title={title} description={description}>
+        {headerActions}
         {allowCreate ? (
           <Button type="button" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
