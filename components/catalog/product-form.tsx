@@ -28,6 +28,8 @@ type VariantRow = {
   barcode: string;
   price: string;
   cost: string;
+  wholesale: string;
+  retail: string;
   discount: string;
   minStock: string;
   weight: string;
@@ -87,6 +89,8 @@ export type ProductLoaded = {
     variantKey: string;
     price: string;
     cost: string;
+    wholesalePrice?: string;
+    retailPrice?: string;
     discount?: string;
     minStock?: string;
     weight?: string | null;
@@ -219,6 +223,8 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
         barcode: "",
         price: calcFinalSellingPrice(form.retailPrice, form.discount),
         cost: form.purchasePrice,
+        wholesale: form.wholesalePrice,
+        retail: form.retailPrice,
         discount: form.discount,
         minStock: form.minStock,
         weight: "",
@@ -252,22 +258,52 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
       if (!form.name.trim()) nextErrors.name = "Product name is required";
       if (!form.code.trim()) nextErrors.code = "Product code / SKU is required";
       if (!form.categoryId) nextErrors.categoryId = "Category is required";
-      if (!isNonNegativeNum(form.purchasePrice)) nextErrors.purchasePrice = "Purchase / Cost Price must be a positive number (≥ 0)";
-      if (!isNonNegativeNum(form.wholesalePrice)) nextErrors.wholesalePrice = "Wholesale Price must be a positive number (≥ 0)";
-      if (!isNonNegativeNum(form.retailPrice)) nextErrors.retailPrice = "Retail Price must be a positive number (≥ 0)";
+      // VARIABLE products carry pricing on each variant — main-level prices are optional.
+      if (form.type === "VARIABLE") {
+        if (!isNonNegativeNumOrEmpty(form.purchasePrice)) nextErrors.purchasePrice = "Purchase / Cost Price must be a positive number (≥ 0)";
+        if (!isNonNegativeNumOrEmpty(form.wholesalePrice)) nextErrors.wholesalePrice = "Wholesale Price must be a positive number (≥ 0)";
+        if (!isNonNegativeNumOrEmpty(form.retailPrice)) nextErrors.retailPrice = "Retail Price must be a positive number (≥ 0)";
+      } else {
+        if (!isNonNegativeNum(form.purchasePrice)) nextErrors.purchasePrice = "Purchase / Cost Price must be a positive number (≥ 0)";
+        if (!isNonNegativeNum(form.wholesalePrice)) nextErrors.wholesalePrice = "Wholesale Price must be a positive number (≥ 0)";
+        if (!isNonNegativeNum(form.retailPrice)) nextErrors.retailPrice = "Retail Price must be a positive number (≥ 0)";
+      }
       if (!isNonNegativeNumOrEmpty(form.minStock)) nextErrors.minStock = "Minimum stock must be a positive number (≥ 0)";
       if (!isNonNegativeNumOrEmpty(form.reorderLevel)) nextErrors.reorderLevel = "Reorder level must be a positive number (≥ 0)";
       const badOpening = Object.entries(form.opening).find(([, q]) => !isNonNegativeNumOrEmpty(q));
       if (badOpening) nextErrors.opening = "Opening qty must be a positive number (≥ 0)";
       if (form.type === "VARIABLE") {
-        const badVariant = form.variants.find(
-          (v) =>
-            !isNonNegativeNumOrEmpty(v.price) ||
-            !isNonNegativeNumOrEmpty(v.cost) ||
+        // Every sellable (ACTIVE) variant must carry its own Cost, Wholesale and Retail price.
+        let firstVariantError = "";
+        for (const v of form.variants) {
+          if (v.status !== "ACTIVE") continue;
+          const missing: string[] = [];
+          if (!isNonNegativeNum(v.cost)) {
+            nextErrors[`variant:${v.id}:cost`] = `Variant "${v.label}" needs a Cost price (≥ 0)`;
+            missing.push("Cost");
+          }
+          if (!isNonNegativeNum(v.wholesale)) {
+            nextErrors[`variant:${v.id}:wholesale`] = `Variant "${v.label}" needs a Wholesale price (≥ 0)`;
+            missing.push("Wholesale");
+          }
+          if (!isNonNegativeNum(v.retail)) {
+            nextErrors[`variant:${v.id}:retail`] = `Variant "${v.label}" needs a Retail price (≥ 0)`;
+            missing.push("Retail");
+          }
+          if (!isNonNegativeNumOrEmpty(v.price)) {
+            nextErrors[`variant:${v.id}:price`] = `Variant "${v.label}" has an invalid selling price`;
+          }
+          if (
             !isNonNegativeNumOrEmpty(v.minStock) ||
-            Object.values(v.opening ?? {}).some((q) => !isNonNegativeNumOrEmpty(q)),
-        );
-        if (badVariant) nextErrors.variants = `Variant "${badVariant.label}" has a negative price, cost, min stock, or opening qty`;
+            Object.values(v.opening ?? {}).some((q) => !isNonNegativeNumOrEmpty(q))
+          ) {
+            nextErrors[`variant:${v.id}:stock`] = `Variant "${v.label}" has an invalid min stock or opening qty`;
+          }
+          if (missing.length && !firstVariantError) {
+            firstVariantError = `Variant "${v.label}" is missing required pricing: ${missing.join(", ")}`;
+          }
+        }
+        if (firstVariantError) nextErrors.variants = firstVariantError;
       }
       if (Number(form.discount || 0) < 0 || Number(form.discount || 0) > 100) nextErrors.discount = "Discount must be between 0 and 100";
       if (form.type === "VARIABLE" && !form.variants.length) {
@@ -309,7 +345,7 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
         batchTracking: form.batchTracking,
         serialTracking: form.serialTracking,
         sellingPrice: finalSellingPriceNum,
-        purchasePrice: form.purchasePrice,
+        purchasePrice: form.purchasePrice || undefined,
         wholesalePrice: form.wholesalePrice || undefined,
         retailPrice: form.retailPrice || undefined,
         discount: form.discount,
@@ -344,6 +380,8 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
                 barcode: v.barcode || undefined,
                 price: v.price,
                 cost: v.cost,
+                wholesalePrice: v.wholesale || undefined,
+                retailPrice: v.retail || undefined,
                 discount: v.discount,
                 minStock: v.minStock,
                 weight: v.weight || undefined,
@@ -406,6 +444,8 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
           barcode: v.barcodes?.[0]?.code ?? "",
           price: String(v.price ?? "0"),
           cost: String(v.cost ?? "0"),
+          wholesale: String(v.wholesalePrice ?? ""),
+          retail: String(v.retailPrice ?? ""),
           discount: String(v.discount ?? "0"),
           minStock: String(v.minStock ?? "0"),
           weight: v.weight ?? "",
@@ -614,102 +654,172 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
               : ""})
           </button>
           {form.variants.length ? (
-            <>
-              <div className="mt-3 overflow-x-auto rounded-md border touch-pan-x">
-              <table className="w-full min-w-[1020px] border-collapse text-xs">
-                <thead>
-                  <tr className="whitespace-nowrap text-left text-muted-foreground">
-                    <th className="sticky left-0 z-10 min-w-[150px] border-r bg-muted/60 py-1 pl-2 pr-2">Variant</th>
-                    <th>SKU</th>
-                    <th>
-                      <span className="inline-flex items-center gap-1">
-                        Barcode
-                        <InfoTip
-                          label="Variant barcode"
-                          description="Each variant needs its own unique barcode for accurate POS scanning — e.g. Red / S and Red / M must differ."
-                        />
-                      </span>
-                    </th>
-                    <th>Price</th>
-                    <th>Cost</th>
-                    <th>Disc.</th>
-                    <th>Min</th>
-                    <th>Wt</th>
-                    <th>Status</th>
-                    {locations.map((l) => (
-                      <th key={l.id}>{l.name}</th>
-                    ))}
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.variants.map((v) => (
-                    <tr key={v.id} className="border-t">
-                      <td className="sticky left-0 z-10 border-r bg-card py-1 pl-2 pr-2">
-                        <span className="font-medium">{v.label}</span>
-                        {v.id.startsWith("new|") ? (
-                          <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                            New
-                          </span>
-                        ) : null}
-                      </td>
-                      <td>
-                        <input className={inputClass + " h-8 w-28"} value={v.sku} onChange={(e) => patchVar(v.id, { sku: e.target.value })} />
-                      </td>
-                      <td>
-                        <input className={inputClass + " h-8 w-28"} value={v.barcode} onChange={(e) => patchVar(v.id, { barcode: e.target.value })} />
-                      </td>
-                      <td>
-                        <input className={inputClass + " h-8 w-20"} value={v.price} onChange={(e) => patchVar(v.id, { price: e.target.value })} type="number" min="0" step="0.01" inputMode="decimal" />
-                      </td>
-                      <td>
-                        <input className={inputClass + " h-8 w-20"} value={v.cost} onChange={(e) => patchVar(v.id, { cost: e.target.value })} type="number" min="0" step="0.01" inputMode="decimal" />
-                      </td>
-                      <td>
-                        <input className={inputClass + " h-8 w-16"} value={v.discount} onChange={(e) => patchVar(v.id, { discount: e.target.value })} type="number" min="0" max="100" step="0.01" inputMode="decimal" />
-                      </td>
-                      <td>
-                        <input className={inputClass + " h-8 w-14"} value={v.minStock} onChange={(e) => patchVar(v.id, { minStock: e.target.value })} type="number" min="0" step="1" inputMode="numeric" />
-                      </td>
-                      <td>
-                        <input className={inputClass + " h-8 w-14"} value={v.weight} onChange={(e) => patchVar(v.id, { weight: e.target.value })} type="number" min="0" step="0.01" inputMode="decimal" />
-                      </td>
-                      <td>
-                        <select className={inputClass + " h-8 w-24"} value={v.status} onChange={(e) => patchVar(v.id, { status: e.target.value as "ACTIVE" | "INACTIVE" })}>
-                          <option value="ACTIVE">Active</option>
-                          <option value="INACTIVE">Inactive</option>
-                        </select>
-                      </td>
-                      {locations.map((l) => (
-                        <td key={l.id}>
-                          <input
-                            className={inputClass + " h-8 w-16"}
-                            value={v.opening[l.id] ?? "0"}
-                            onChange={(e) =>
-                              patchVar(v.id, { opening: { ...v.opening, [l.id]: e.target.value } })
-                            }
-                            type="number"
-                            min="0"
-                            step="1"
-                            inputMode="numeric"
-                          />
-                        </td>
-                      ))}
-                      <td>
-                        <button type="button" className="text-destructive" onClick={() => setDropVariant(v.id)}>
-                          ×
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground md:hidden">Swipe sideways to see all columns — the variant name stays pinned.</p>
-            </>
-          ) : (
-            <p className="mt-2 text-xs text-muted-foreground">No combinations yet.</p>
-          )}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+      {form.variants.map((v) => (
+        <div
+          key={v.id}
+          className="rounded-md border p-2 bg-card shadow-sm"
+        >
+          {/* Header: variant name + New badge + Status + Delete */}
+          <div className="grid grid-cols-4 gap-1.5 text-xs mb-1">
+            <span className="font-medium line-clamp-1">{v.label}</span>
+            {v.id.startsWith("new|") ? (
+              <span
+                className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+              >
+                New
+              </span>
+            ) : null}
+            <span className="flex items-center gap-0.5">
+              <span className="h-2 w-2 rounded bg-green-500" />
+              <span className="text-[10px] font-medium">Active</span>
+            </span>
+            <button
+              type="button"
+              className="text-destructive p-0.5 text-xs"
+              onClick={() => setDropVariant(v.id)}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* SKU + Barcode on same row */}
+          <div className="grid grid-cols-2 gap-1.5">
+            <input
+              className={inputClass + " h-8"}
+              value={v.sku}
+              onChange={(e) => patchVar(v.id, { sku: e.target.value })}
+            />
+            <input
+              className={inputClass + " h-8"}
+              value={v.barcode}
+              onChange={(e) => patchVar(v.id, { barcode: e.target.value })}
+            />
+          </div>
+
+          {/* Price + Cost + Discount */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <label className="block">
+              <span className="mb-0.5 block text-[10px] text-muted-foreground">Price</span>
+              <input
+                className={inputClass + " h-8" + (errors[`variant:${v.id}:price`] ? " border-destructive" : "")}
+                value={v.price}
+                onChange={(e) => patchVar(v.id, { price: e.target.value })}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-0.5 block text-[10px] text-muted-foreground">Cost *</span>
+              <input
+                className={inputClass + " h-8" + (errors[`variant:${v.id}:cost`] ? " border-destructive" : "")}
+                value={v.cost}
+                onChange={(e) => patchVar(v.id, { cost: e.target.value })}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-0.5 block text-[10px] text-muted-foreground">Discount</span>
+              <input
+                className={inputClass + " h-8"}
+                value={v.discount}
+                onChange={(e) => patchVar(v.id, { discount: e.target.value })}
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                inputMode="decimal"
+              />
+            </label>
+          </div>
+
+          {/* Wholesale + Retail (required per variant) */}
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="block">
+              <span className="mb-0.5 block text-[10px] text-muted-foreground">Wholesale *</span>
+              <input
+                className={inputClass + " h-8" + (errors[`variant:${v.id}:wholesale`] ? " border-destructive" : "")}
+                value={v.wholesale}
+                onChange={(e) => patchVar(v.id, { wholesale: e.target.value })}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-0.5 block text-[10px] text-muted-foreground">Retail *</span>
+              <input
+                className={inputClass + " h-8" + (errors[`variant:${v.id}:retail`] ? " border-destructive" : "")}
+                value={v.retail}
+                onChange={(e) => patchVar(v.id, { retail: e.target.value })}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+              />
+            </label>
+          </div>
+          {variantPriceError(v.id) ? (
+            <p className="mt-1 text-[11px] text-destructive">{variantPriceError(v.id)}</p>
+          ) : null}
+
+          {/* Min Wt + Floor + Test */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <input
+              className={inputClass + " h-8"}
+              value={v.minStock}
+              onChange={(e) => patchVar(v.id, { minStock: e.target.value })}
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+            />
+            <input
+              className={inputClass + " h-8"}
+              value={
+                Object.keys(v.opening).length > 0
+                  ? v.opening[Object.keys(v.opening)[0]] ?? "0"
+                  : "0"
+              }
+              onChange={(e) =>
+                patchVar(v.id, {
+                  opening: {
+                    ...v.opening,
+                    [Object.keys(v.opening)[0] || ""]: e.target.value,
+                  },
+                })
+              }
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+            />
+            <div className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={v.status === "ACTIVE"}
+                onChange={(e) =>
+                  patchVar(v.id, {
+                    status: e.target.checked ? "ACTIVE" : "INACTIVE",
+                  })
+                }
+                className="h-3 w-3 rounded-border"
+              />
+              <span className="text-[10px] text-muted-foreground">Test</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="mt-2 text-xs text-muted-foreground">No combinations yet.</p>
+  )}
         </Section>
       ) : (
         <Section title="4. Variants">
@@ -719,13 +829,13 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
 
 <Section title="5. Pricing">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Purchase / Cost Price *" error={errors.purchasePrice}>
+          <Field label={form.type === "VARIABLE" ? "Purchase / Cost Price" : "Purchase / Cost Price *"} error={errors.purchasePrice}>
             <input className={inputClass} value={form.purchasePrice} onChange={(e) => set("purchasePrice", e.target.value)} placeholder="Enter purchase / cost price" type="number" min="0" step="0.01" inputMode="decimal" />
           </Field>
-          <Field label="Wholesale Price *" error={errors.wholesalePrice}>
+          <Field label={form.type === "VARIABLE" ? "Wholesale Price" : "Wholesale Price *"} error={errors.wholesalePrice}>
             <input className={inputClass} value={form.wholesalePrice} onChange={(e) => set("wholesalePrice", e.target.value)} placeholder="Enter wholesale price" type="number" min="0" step="0.01" inputMode="decimal" />
           </Field>
-          <Field label="Retail Price *" error={errors.retailPrice}>
+          <Field label={form.type === "VARIABLE" ? "Retail Price" : "Retail Price *"} error={errors.retailPrice}>
             <input className={inputClass} value={form.retailPrice} onChange={(e) => set("retailPrice", e.target.value)} placeholder="Enter retail price" type="number" min="0" step="0.01" inputMode="decimal" />
           </Field>
           <Field label="Discount %">
@@ -834,6 +944,18 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
       ...s,
       variants: s.variants.map((row) => (row.id === id ? { ...row, ...patch } : row)),
     }));
+  }
+
+  function variantPriceError(id: string) {
+    const msgs = [
+      errors[`variant:${id}:cost`],
+      errors[`variant:${id}:wholesale`],
+      errors[`variant:${id}:retail`],
+      errors[`variant:${id}:price`],
+      errors[`variant:${id}:stock`],
+    ].filter(Boolean);
+    if (!msgs.length) return null;
+    return msgs.length > 1 ? `${msgs[0]} (+${msgs.length - 1} more)` : msgs[0];
   }
 }
 
