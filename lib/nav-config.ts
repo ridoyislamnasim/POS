@@ -47,6 +47,12 @@ import {
   ListTree,
 } from "lucide-react";
 
+/** Role key allowed to see Backup & Restore in the sidebar. */
+export const BACKUP_ROLE_KEY = "PLATFORM_SUPER_ADMIN";
+
+/** Compact tenant option for platform-only pickers. */
+export type PlatformTenantOption = { id: string; name: string };
+
 export type NavTone = "orange" | "emerald" | "amber" | "rose" | "lime" | "teal" | "yellow" | "stone" | "fuchsia";
 
 export type NavItem = {
@@ -57,6 +63,8 @@ export type NavItem = {
   platformOnly?: boolean;
   /** Visible only to the tenant owner (never platform admins, never staff). */
   ownerOnly?: boolean;
+  /** Visible only to users holding this role key (checked from DB-backed /me roles). */
+  roleKey?: string;
 };
 
 export type NavGroup = {
@@ -210,7 +218,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "Warehouses", href: "/warehouses", icon: Warehouse, permission: "warehouse.manage" },
       { title: "Subscription", href: "/subscription", icon: CreditCard, permission: "plan.manage" },
       { title: "API / Integration", href: "/integrations", icon: Plug, permission: "integration.manage" },
-      { title: "Backup & Restore", href: "/backup", icon: DatabaseBackup, permission: "backup.manage" },
+      { title: "Backup & Restore", href: "/backup", icon: DatabaseBackup, permission: null, platformOnly: true, roleKey: BACKUP_ROLE_KEY },
     ],
   },
   {
@@ -295,12 +303,13 @@ export function pageMeta(path: string) {
   return hit ? PAGE_TITLES[hit] : { crumb: "POS", title: "POS" };
 }
 
-export function filterNavGroups(can: (p: string) => boolean, opts?: { isPlatform?: boolean; isOwner?: boolean }): NavGroup[] {
+export function filterNavGroups(can: (p: string) => boolean, opts?: { isPlatform?: boolean; isOwner?: boolean; roles?: string[] }): NavGroup[] {
   return NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((i) => {
       if (i.platformOnly && !opts?.isPlatform) return false;
       if (i.ownerOnly && (!opts?.isOwner || opts?.isPlatform)) return false;
+      if (i.roleKey && !(opts?.roles ?? []).includes(i.roleKey)) return false;
       return !i.permission || can(i.permission);
     }),
   })).filter((g) => g.items.length > 0);

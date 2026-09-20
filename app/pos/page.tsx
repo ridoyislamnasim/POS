@@ -269,6 +269,7 @@ const cartParts = useMemo(() => {
   return { lines, subtotal, tax, lineDiscount, billDiscount, total };
 }, [store.cart, store.txDiscountType, store.txDiscountAmount, store.txDiscountPercent]);
   const cartTotal = cartParts.total;
+  const totalUnits = useMemo(() => store.cart.reduce((s, l) => s + (Number(l.qty) || 0), 0), [store.cart]);
   const catalog = products.data ?? [];
   const paidNow = Number(cash || 0) + Number(card || 0) + Number(mfs || 0);
   const dueNow = Math.max(cartTotal - paidNow, 0);
@@ -653,6 +654,11 @@ const cartParts = useMemo(() => {
                 />
                 <PageHelpButton className="h-10 w-10 shrink-0 sm:h-9 sm:w-9" />
               </form>
+              <div className="shrink-0 border-b border-border/60 bg-background px-2 py-1.5 lg:hidden">
+                <div data-help="pos-customer">
+                  <PosCustomerPicker openSignal={customerFocus} />
+                </div>
+              </div>
               {matrixProduct ? (
                 <div className="min-h-0 flex-1 overflow-auto">
                   <Matrix
@@ -745,9 +751,14 @@ const cartParts = useMemo(() => {
                 className={btnGhost + " h-12 shrink-0 px-3 tabular-nums"}
                 onClick={() => (store.cart.length ? setCartOpen(true) : setHoldsOpen(true))}
               >
-                {store.cart.length
-                  ? `${store.cart.length} item${store.cart.length === 1 ? "" : "s"}`
-                  : "Recall holds"}
+                {store.cart.length ? (
+                  <>
+                    {store.cart.length} item{store.cart.length === 1 ? "" : "s"}{" "}
+                    <span className="text-[9px] -pb-6 font-normal text-muted-foreground">({totalUnits})</span>
+                  </>
+                ) : (
+                  "Recall holds"
+                )}
               </button>
               <button
                 type="button"
@@ -815,6 +826,7 @@ const cartParts = useMemo(() => {
         <Modal
           title={discEdit.kind === "line" ? "Item discount" : "Bill discount"}
           onClose={() => setDiscEdit(null)}
+          zIndex={60}
         >
           <DiscountEditor
             canDiscount={canDiscount}

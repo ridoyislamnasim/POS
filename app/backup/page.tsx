@@ -1,8 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { api } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { api, qs } from "@/lib/api";
+import { useMe } from "@/lib/auth";
+import { BACKUP_ROLE_KEY, type PlatformTenantOption } from "@/lib/nav-config";
 import { useServerList } from "@/lib/use-list-state";
 import { AppShell } from "@/components/app-shell";
 import { ListFrame } from "@/components/ui/list-frame";
@@ -33,12 +36,48 @@ function timeAgo(date: string) {
 }
 
 export default function BackupPage() {
+  const router = useRouter();
+  const { me, isSuccess } = useMe();
+  // Strict role-key gate: only users holding the PLATFORM_SUPER_ADMIN role key
+  // may see this page (platform flag alone is not enough).
+  const isPlatformAdmin = Boolean(me?.isPlatform && me?.roles?.includes(BACKUP_ROLE_KEY));
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [tenantId, setTenantId] = useState("");
   const qc = useQueryClient();
-  const list = useServerList<Rec>("backups", "/api/v1/saas/backups");
+  const tenants = useQuery({
+    queryKey: ["platform-tenants-compact"],
+    queryFn: async () => {
+      const res = await api<{ data: PlatformTenantOption[] } | PlatformTenantOption[]>(
+        "/api/v1/platform-billing/tenants?limit=100",
+      );
+      return Array.isArray(res) ? res : res.data ?? [];
+    },
+    enabled: isPlatformAdmin,
+  });
+  const list = useServerList<Rec>(["backups", tenantId], "/api/v1/saas/backups", {
+    enabled: isPlatformAdmin && Boolean(tenantId),
+    fixedParams: tenantId ? { tenantId } : undefined,
+  });
+
+  useEffect(() => {
+    if (isSuccess && !isPlatformAdmin) router.replace("/dashboard");
+  }, [isSuccess, isPlatformAdmin, router]);
+
+  useEffect(() => {
+    const rows = tenants.data ?? [];
+    if (!tenantId && rows.length === 1) setTenantId(rows[0].id);
+  }, [tenants.data, tenantId]);
+
+  if (isSuccess && !isPlatformAdmin) return null;
 
   const run = useMutation({
-    mutationFn: () => api<{ record: Rec; payload: unknown }>("/api/v1/saas/backup", { method: "POST", body: JSON.stringify({ note: "manual" }) }),
+    mutationFn: () => {
+      if (!tenantId) throw new Error("Select a tenant first");
+      return api<{ record: Rec; payload: unknown }>("/api/v1/saas/backup", {
+        method: "POST",
+        body: JSON.stringify({ note: "manual", tenantId }),
+      });
+    },
     onSuccess: (data) => {
       toastSuccess("Backup created successfully");
       const blob = new Blob([JSON.stringify(data.payload, null, 2)], { type: "application/json" });
@@ -54,7 +93,7 @@ export default function BackupPage() {
   });
 
   const download = useMutation({
-    mutationFn: (id: string) => api<unknown>(`/api/v1/saas/backups/${id}/download`),
+    mutationFn: (id: string) => api<unknown>(`/api/v1/saas/backups/${id}/download${qs({ tenantId })}`),
     onSuccess: (payload) => {
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -73,8 +112,8 @@ export default function BackupPage() {
 
   return (
     <AppShell>
-      <PageHeader title="Backup & Restore" description="Export your data as a JSON snapshot.">
-        <Button onClick={() => setConfirmOpen(true)} disabled={run.isPending}>
+      <PageHeader title="Backup & Restore" description="Platform-only export. Pick a tenant, then export it as a JSON snapshot.">
+        <Button onClick={() => setConfirmOpen(true)} disabled={run.isPending || !tenantId}>
           {run.isPending ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
@@ -83,6 +122,28 @@ export default function BackupPage() {
           {run.isPending ? "Backing up..." : "Run Backup"}
         </Button>
       </PageHeader>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <label className="text-sm text-muted-foreground" htmlFor="backup-tenant">Tenant</label>
+        <select
+          id="backup-tenant"
+          className="h-9 min-w-56 rounded-md border border-input bg-background px-2 text-sm"
+          value={tenantId}
+          onChange={(e) => {
+            setTenantId(e.target.value);
+            void qc.invalidateQueries({ queryKey: ["backups"] });
+          }}
+        >
+          <option value="">Select tenant…</option>
+          {(tenants.data ?? []).map((t) => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {!tenantId ? (
+        <p className="mb-4 text-sm text-muted-foreground">Select a tenant to list and create backups.</p>
+      ) : null}
 
       {/* Stats */}
       <div className="mb-6 grid gap-4 sm:grid-cols-3">

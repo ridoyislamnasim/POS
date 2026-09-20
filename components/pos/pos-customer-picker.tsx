@@ -147,7 +147,7 @@ export function PosCustomerPicker({
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative z-10">
       {customer ? (
         <button
           type="button"
@@ -189,7 +189,7 @@ export function PosCustomerPicker({
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
             placeholder="Name, phone, email, or ID"
-            className={inputClass + " h-11"}
+            className={inputClass + " h-11 text-[15px] sm:h-10 sm:text-sm"}
             role="combobox"
             aria-expanded={open}
             aria-controls={listId}
@@ -203,7 +203,7 @@ export function PosCustomerPicker({
         <div
           id={listId}
           role="listbox"
-          className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-lg"
+          className="absolute z-50 mt-1 max-h-[min(18rem,60vh)] w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-lg"
         >
           {search.isFetching ? (
             <div className="px-3 py-2 text-xs text-muted-foreground">Searching…</div>

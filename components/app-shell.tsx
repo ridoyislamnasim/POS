@@ -126,6 +126,7 @@ async function signOut() {
           can={can}
           isPlatform={Boolean(me?.isPlatform)}
           isOwner={Boolean(me?.roles?.includes("TENANT_OWNER"))}
+          roles={me?.roles ?? []}
           loading={isLoading}
           onCloseMobile={() => setOpen(false)}
           onToggleCollapse={toggleCollapse}

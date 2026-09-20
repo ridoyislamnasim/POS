@@ -279,6 +279,7 @@ export function Modal({
   onClose,
   className,
   size = "md",
+  zIndex = 50,
 }: {
   open?: boolean;
   title: string;
@@ -288,6 +289,7 @@ export function Modal({
   onClose: () => void;
   className?: string;
   size?: "sm" | "md" | "lg" | "xl";
+  zIndex?: number;
 }) {
   return (
     <Dialog
@@ -298,6 +300,7 @@ export function Modal({
       onClose={onClose}
       className={className}
       size={size}
+      zIndex={zIndex}
     >
       {children}
     </Dialog>
