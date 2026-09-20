@@ -87,6 +87,16 @@ function rowLabel<T extends { id: string }>(row: T) {
   return String(r.name ?? r.code ?? nested?.name ?? r.number ?? r.vendor ?? r.category ?? r.channel ?? r.id);
 }
 
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 120);
+}
+
 function rowToForm<T extends { id: string }>(row: T, fields: ResourceField[]) {
   const r = row as Record<string, unknown>;
   const out: Record<string, string> = {};
@@ -146,7 +156,8 @@ export function ResourcePage<T extends { id: string } = any>({
 
   const list = useServerList<T>(queryKey, path);
   const create = useMutation({
-    mutationFn: () => api(path, { method: "POST", body: JSON.stringify(transform ? transform(form) : form) }),
+    mutationFn: (data: Record<string, string>) =>
+      api(path, { method: "POST", body: JSON.stringify(transform ? transform(data) : data) }),
     onSuccess: () => {
       toastCreated(entity);
       setForm({});
@@ -180,18 +191,23 @@ export function ResourcePage<T extends { id: string } = any>({
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (editing) update.mutate(editing.id);
-    else create.mutate();
+    else create.mutate({ ...form, status: form.status ?? "Active" });
   }
 
   function openEdit(row: T) {
     setEditing(row);
-    setForm(rowToForm(row, fields ?? []));
+    const formData = rowToForm(row, fields ?? []);
+    const nameVal = (row as Record<string, unknown>).name;
+    if (typeof nameVal === "string") {
+      formData.slug = slugify(nameVal);
+    }
+    setForm(formData);
     setCreateOpen(false);
   }
 
   const openCreate = useCallback(() => {
     setEditing(null);
-    setForm({});
+    setForm({ status: "Active" });
     setCreateOpen(true);
   }, []);
 
@@ -355,7 +371,14 @@ export function ResourcePage<T extends { id: string } = any>({
                   placeholder={f.label}
                   required={f.required && !editing}
                   value={form[f.key] ?? ""}
-                  onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setForm((s) => ({
+                      ...s,
+                      [f.key]: val,
+                      ...(f.key === "name" ? { slug: slugify(val) } : {}),
+                    }));
+                  }}
                 />
               )}
             </Field>

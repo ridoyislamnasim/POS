@@ -1,24 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2, User, Camera, Lock, Save, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Camera, Lock, Save, AlertCircle, Eye, EyeOff, Trash2 } from "lucide-react";
 import { useProfile, useUpdateProfile, useChangePassword } from "@/lib/auth";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { fileUrl } from "@/lib/api";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { PageHeader } from "@/components/ui";
 
 export default function ProfilePage() {
-  const router = useRouter();
   const profileQuery = useProfile();
   const updateProfile = useUpdateProfile();
   const changePassword = useChangePassword();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
+  // Newly-picked image (base64) waiting to be saved, and a flag for remove.
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -32,14 +33,28 @@ export default function ProfilePage() {
   useEffect(() => {
     if (profileQuery.data) {
       setName(profileQuery.data.name);
-      if (profileQuery.data.imageUrl) {
-        setPreviewUrl(profileQuery.data.imageUrl);
-      }
+      setImageDataUrl(null);
+      setRemoveImage(false);
     }
   }, [profileQuery.data]);
 
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const savedImageUrl = removeImage
+    ? null
+    : imageDataUrl ?? profileQuery.data?.imageUrl ?? null;
+  const avatarSrc = fileUrl(savedImageUrl);
+
+  const initials = (profileQuery.data?.name ?? name ?? "U")
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // Allow re-selecting the same file afterwards.
+    e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       toastError(null, "Please select an image file");
@@ -52,20 +67,33 @@ export default function ProfilePage() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
-      setPreviewUrl(dataUrl);
       setImageDataUrl(dataUrl);
+      setRemoveImage(false);
     };
+    reader.onerror = () => toastError(null, "Could not read the image file");
     reader.readAsDataURL(file);
+  }
+
+  function handleRemoveImage() {
+    setImageDataUrl(null);
+    setRemoveImage(true);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function handleSaveProfile() {
     try {
+      const imageUrl = imageDataUrl
+        ? imageDataUrl
+        : removeImage
+          ? null
+          : undefined;
       await updateProfile.mutateAsync({
-        name: name || undefined,
-        imageUrl: imageDataUrl,
+        name: name.trim() || undefined,
+        imageUrl,
       });
       toastSuccess("Profile updated");
       setImageDataUrl(null);
+      setRemoveImage(false);
       void profileQuery.refetch();
     } catch (e) {
       toastError(e, "Could not save profile");
@@ -151,21 +179,27 @@ export default function ProfilePage() {
           <div className="grid gap-4">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-semibold text-primary-foreground">
-                  {(data?.name ?? "U")
-                    .split(" ")
-                    .map((p) => p[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase()}
-                </div>
-                <label
+                {avatarSrc ? (
+                  <img
+                    src={avatarSrc}
+                    alt="Profile photo"
+                    className="h-16 w-16 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-semibold text-primary-foreground">
+                    {initials}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  aria-label="Change photo"
                   className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white hover:bg-primary/80"
-                  htmlFor="avatar-upload"
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <Camera className="h-3.5 w-3.5" />
-                </label>
+                </button>
                 <input
+                  ref={fileInputRef}
                   id="avatar-upload"
                   type="file"
                   accept="image/*"
@@ -179,9 +213,25 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {previewUrl && !previewUrl.startsWith("/uploads/") ? (
-              <img src={previewUrl} alt="Avatar" className="mt-2 h-24 w-24 rounded-lg object-cover" />
-            ) : null}
+            {(imageDataUrl || removeImage) && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {imageDataUrl
+                    ? "New photo selected — Save Profile to apply."
+                    : "Photo will be removed when you save."}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRemoveImage}
+                  disabled={!imageDataUrl && removeImage}
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  Remove
+                </Button>
+              </div>
+            )}
 
             <div>
               <span className="text-sm font-medium">Name</span>

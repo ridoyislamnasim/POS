@@ -136,6 +136,7 @@ async function signOut() {
 <AppTopBar
            path={path}
            userName={me?.name}
+           imageUrl={me?.imageUrl ?? null}
            branches={me?.branches ?? []}
            canNotify={can("notification.view")}
            collapsed={collapsed}

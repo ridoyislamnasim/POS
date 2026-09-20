@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CircleHelp, Globe, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, Store, User, Lock } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, fileUrl } from "@/lib/api";
 import { usePOSStore } from "@/lib/pos-store";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
@@ -36,6 +36,7 @@ function relativeTime(iso: string) {
 export function AppTopBar({
   path,
   userName,
+  imageUrl,
   branches,
   canNotify,
   collapsed,
@@ -47,6 +48,7 @@ export function AppTopBar({
 }: {
   path: string;
   userName?: string;
+  imageUrl?: string | null;
   branches?: BranchOpt[];
   canNotify?: boolean;
   collapsed?: boolean;
@@ -99,6 +101,7 @@ export function AppTopBar({
     .join("")
     .slice(0, 2)
     .toUpperCase();
+  const avatarSrc = fileUrl(imageUrl);
 
   const unread = useQuery({
     queryKey: ["notif-unread"],
@@ -316,14 +319,32 @@ export function AppTopBar({
               aria-expanded={menu === "user"}
               aria-haspopup="true"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground" aria-hidden>
-                {initials}
-              </span>
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt=""
+                  className="h-8 w-8 rounded-full object-cover"
+                  aria-hidden
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground" aria-hidden>
+                  {initials}
+                </span>
+              )}
             </Button>
           </ActionTooltip>
           {menu === "user" ? (
             <div className="absolute right-0 mt-2 w-52 rounded-md border bg-popover p-1 shadow-md">
-              <div className="px-2 py-2 text-xs text-muted-foreground">{userName ?? "Signed in"}</div>
+              <div className="flex items-center gap-2 px-2 py-2">
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="" className="h-8 w-8 rounded-full object-cover" aria-hidden />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground" aria-hidden>
+                    {initials}
+                  </span>
+                )}
+                <span className="truncate text-xs text-muted-foreground">{userName ?? "Signed in"}</span>
+              </div>
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
