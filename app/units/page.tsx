@@ -29,6 +29,10 @@ export default function UnitsPage() {
         { key: "abbreviation", label: "Abbr." },
         { key: "status", label: "Status" },
       ]}
+      statusOptions={[
+        { value: "ACTIVE", label: "Active" },
+        { value: "INACTIVE", label: "Inactive" },
+      ]}
     />
   );
 }

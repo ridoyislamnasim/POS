@@ -191,7 +191,7 @@ export function ResourcePage<T extends { id: string } = any>({
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (editing) update.mutate(editing.id);
-    else create.mutate({ ...form, status: form.status ?? "Active" });
+    else create.mutate({ ...form, status: (form.status as string) ?? "ACTIVE" });
   }
 
   function openEdit(row: T) {
@@ -207,9 +207,9 @@ export function ResourcePage<T extends { id: string } = any>({
 
   const openCreate = useCallback(() => {
     setEditing(null);
-    setForm({ status: "Active" });
+    setForm({ status: statusOptions?.[0]?.value ?? "ACTIVE" });
     setCreateOpen(true);
-  }, []);
+  }, [statusOptions]);
 
   useHelpCreateAction(openCreate, allowCreate);
 

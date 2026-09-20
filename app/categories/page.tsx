@@ -29,6 +29,10 @@ export default function CategoriesPage() {
         { key: "slug", label: "Slug" },
         { key: "status", label: "Status" },
       ]}
+      statusOptions={[
+        { value: "ACTIVE", label: "Active" },
+        { value: "INACTIVE", label: "Inactive" },
+      ]}
     />
   );
 }

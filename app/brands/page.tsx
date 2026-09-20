@@ -27,6 +27,10 @@ export default function BrandsPage() {
         { key: "name", label: "Name" },
         { key: "status", label: "Status" },
       ]}
+      statusOptions={[
+        { value: "ACTIVE", label: "Active" },
+        { value: "INACTIVE", label: "Inactive" },
+      ]}
     />
   );
 }

@@ -33,6 +33,10 @@ export default function SubcategoriesPage() {
         { key: "category", label: "Category", render: (r) => (r as { category?: { name: string } }).category?.name ?? "—" },
         { key: "status", label: "Status" },
       ]}
+      statusOptions={[
+        { value: "ACTIVE", label: "Active" },
+        { value: "INACTIVE", label: "Inactive" },
+      ]}
     />
   );
 }
