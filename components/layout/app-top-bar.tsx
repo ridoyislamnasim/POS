@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CircleHelp, Globe, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, Store, User, Lock } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, fileUrl } from "@/lib/api";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, apiList, fileUrl } from "@/lib/api";
 import { usePOSStore } from "@/lib/pos-store";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
@@ -109,19 +109,64 @@ export function AppTopBar({
     enabled: !!canNotify,
     refetchInterval: visible ? 30_000 : false,
   });
+  const {
+    data: notifData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: notifLoading,
+  } = useInfiniteQuery({
+    queryKey: ["notif-infinite"],
+    queryFn: ({ pageParam = 1 }) => apiList<Note>(`/api/v1/extras/notifications?page=${pageParam}&limit=15&sortBy=createdAt&sortOrder=desc`),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const { page, totalPages } = lastPage.pagination;
+      return page < totalPages ? page + 1 : undefined;
+    },
+    enabled: !!canNotify,
+    refetchInterval: visible ? 30_000 : false,
+  });
+  // Keep recent for badge compatibility; infinite list is source of truth for dropdown
   const recent = useQuery({
     queryKey: ["notif-recent"],
     queryFn: () => api<Note[]>("/api/v1/extras/notifications/recent"),
     enabled: !!canNotify,
     refetchInterval: visible ? 30_000 : false,
   });
-  const notes = recent.data ?? [];
+  const notes = notifData?.pages.flatMap((p) => p.data) ?? recent.data ?? [];
   const unreadCount = unread.data?.count ?? 0;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const handleNotifScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasNextPage || isFetchingNextPage) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
+      void fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+    const sentinel = sentinelRef.current;
+    const root = scrollRef.current;
+    if (!sentinel || !root) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void fetchNextPage();
+      },
+      { root, rootMargin: "80px", threshold: 0 },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, notes.length]);
+
   const markRead = useMutation({
     mutationFn: (id: string) => api(`/api/v1/extras/notifications/${id}/read`, { method: "PATCH" }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["notif-unread"] });
       void qc.invalidateQueries({ queryKey: ["notif-recent"] });
+      void qc.invalidateQueries({ queryKey: ["notif-infinite"] });
       void qc.invalidateQueries({ queryKey: ["notifs"] });
     },
   });
@@ -130,6 +175,7 @@ export function AppTopBar({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["notif-unread"] });
       void qc.invalidateQueries({ queryKey: ["notif-recent"] });
+      void qc.invalidateQueries({ queryKey: ["notif-infinite"] });
       void qc.invalidateQueries({ queryKey: ["notifs"] });
     },
   });
@@ -238,50 +284,76 @@ export function AppTopBar({
             </Button>
           </ActionTooltip>
           {menu === "note" ? (
-            <div className="absolute right-0 mt-2 w-80 rounded-md border bg-popover p-2 text-sm shadow-md">
-              <div className="flex items-center justify-between px-2 py-1">
+            <div className="fixed inset-x-2 top-[52px] z-50 flex max-h-[min(72dvh,420px)] min-h-[140px] w-auto origin-top flex-col overflow-hidden rounded-xl border bg-popover text-sm shadow-xl animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150 sm:absolute sm:inset-x-auto sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:max-h-[min(70vh,420px)] sm:w-80 sm:max-w-none md:w-[380px] sm:origin-top-right sm:shadow-lg">
+              <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
                 <div className="text-xs font-semibold">Notifications</div>
                 {unreadCount > 0 ? (
-                  <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => markAll.mutate()}>
+                  <button type="button" className="rounded px-2 py-0.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10 hover:underline" onClick={() => markAll.mutate()}>
                     Mark all as read
                   </button>
                 ) : null}
               </div>
-              {notes.length === 0 ? <div className="px-2 py-3 text-muted-foreground">No notifications</div> : null}
-              {notes.map((n) => (
+              <div
+                ref={scrollRef}
+                onScroll={handleNotifScroll}
+                className="flex-1 overflow-y-auto overscroll-contain px-1 py-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
+                style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+              >
+                {notifLoading ? (
+                  <div className="space-y-2 p-2">
+                    <div className="h-12 animate-pulse rounded-lg bg-muted/60" />
+                    <div className="h-12 animate-pulse rounded-lg bg-muted/60" />
+                    <div className="h-12 animate-pulse rounded-lg bg-muted/60" />
+                  </div>
+                ) : notes.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">No notifications</div>
+                ) : (
+                  notes.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className={`mb-1 block w-full rounded-lg px-2.5 py-2 text-left transition-all duration-150 hover:bg-accent active:scale-[0.98] ${n.isRead ? "" : "bg-primary/[0.06] ring-1 ring-primary/10"}`}
+                      onClick={() => {
+                        if (!n.isRead) markRead.mutate(n.id);
+                        setMenu(null);
+                        if (n.actionUrl && n.actionUrl.startsWith("/")) router.push(n.actionUrl);
+                        else router.push("/notifications");
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className={`line-clamp-2 flex-1 leading-tight ${n.isRead ? "font-normal" : "font-medium"}`}>{n.title}</div>
+                        {n.priority === "CRITICAL" || n.priority === "HIGH" ? (
+                          <span className="shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">{n.priority}</span>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{n.message}</div>
+                      <span className="mt-1 inline-block text-[10px] text-muted-foreground/80">{relativeTime(n.createdAt)}</span>
+                    </button>
+                  ))
+                )}
+                <div ref={sentinelRef} className="h-1" />
+                {isFetchingNextPage ? (
+                  <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden />
+                    Loading more…
+                  </div>
+                ) : null}
+                {!hasNextPage && notes.length > 0 ? (
+                  <div className="py-2 text-center text-[11px] text-muted-foreground/60">No more notifications</div>
+                ) : null}
+              </div>
+              <div className="shrink-0 border-t bg-popover/80 p-1.5 backdrop-blur-sm">
                 <button
-                  key={n.id}
                   type="button"
-                  className={`block w-full rounded px-2 py-1.5 text-left hover:bg-accent ${n.isRead ? "" : "bg-highlight/10"}`}
+                  className="block w-full rounded-lg px-2 py-2 text-center text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                   onClick={() => {
-                    if (!n.isRead) markRead.mutate(n.id);
                     setMenu(null);
-                    if (n.actionUrl && n.actionUrl.startsWith("/")) router.push(n.actionUrl);
-                    else router.push("/notifications");
+                    router.push("/notifications");
                   }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className={`leading-tight ${n.isRead ? "font-normal" : "font-medium"}`}>{n.title}</div>
-                    {n.priority === "CRITICAL" || n.priority === "HIGH" ? (
-                      <span className="text-[10px] text-destructive">{n.priority}</span>
-                    ) : null}
-                  </div>
-                  <div className="truncate text-[11px] text-muted-foreground">{n.message}</div>
-                  <ActionTooltip label={new Date(n.createdAt).toLocaleString()} side="top">
-                    <span className="inline-block text-[10px] text-muted-foreground">{relativeTime(n.createdAt)}</span>
-                  </ActionTooltip>
+                  View all notifications
                 </button>
-              ))}
-              <button
-                type="button"
-                className="mt-1 block w-full rounded px-2 py-1.5 text-left text-xs font-medium text-primary hover:bg-accent"
-                onClick={() => {
-                  setMenu(null);
-                  router.push("/notifications");
-                }}
-              >
-                View all notifications
-              </button>
+              </div>
             </div>
           ) : null}
         </div>

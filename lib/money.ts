@@ -1,7 +1,7 @@
-/** Match backend ROUND_HALF_UP at 2 decimals for POS display totals. */
+/** Match backend Decimal.ROUND_HALF_UP at 2 decimals for POS display totals. */
 export function roundMoney(value: number, scale = 2): number {
-  const f = 10 ** scale;
-  return Math.round((Number(value) + Number.EPSILON) * f) / f;
+  // Use toFixed half-up to mirror backend Decimal, not binary Math.round(EPSILON)
+  return Number(Number(value).toFixed(scale));
 }
 
 /** Percent of a base amount, rounded with the backend's rule (0 when percent <= 0). */
