@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Field, InfoTip, btnGhost, btnPrimary, inputClass } from "@/components/ui";
 import { WaveInput } from "@/components/ui/wave-input";
+import { VariantImageField } from "@/components/catalog/variant-image-field";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastCreated, toastError, toastSuccess, toastWarn } from "@/lib/toast";
 import { SearchSelect } from "@/components/catalog/search-select";
@@ -696,6 +697,9 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
             <WaveInput label="SKU" value={v.sku} onChange={(val) => patchVar(v.id, { sku: val })} hideZero={false} />
             <WaveInput label="Barcode" value={v.barcode} onChange={(val) => patchVar(v.id, { barcode: val })} hideZero={false} />
           </div>
+
+          {/* Variant image — compact */}
+          <VariantImageField value={v.imageUrl} onChange={(url) => patchVar(v.id, { imageUrl: url })} />
 
           {/* Pricing — placeholder-only, compact with Auto Fill */}
           <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">

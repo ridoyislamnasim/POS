@@ -670,7 +670,7 @@ const cartParts = useMemo(() => {
                 </div>
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-                  <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(105px,1fr))]">
+                  <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
                     {!catalog.length ? (
                       <div className="col-span-full">
                         <EmptyState title="No products" hint={emptyHintFor("/pos")} />
@@ -679,27 +679,37 @@ const cartParts = useMemo(() => {
                     {catalog.map((p) => {
                       const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
                       const price = Number(p.variants[0]?.price ?? 0);
+                      const locationId = station().locationId;
+                      const totalStock = p.variants.reduce((sum, v) => {
+                        const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                        return sum + Number(row?.quantity ?? 0);
+                      }, 0);
+                      const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
+                      const statusCls =
+                        totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
                       return (
                         <button
                           key={p.id}
                           type="button"
                           onClick={() => pickProduct(p)}
-                          className="group flex min-h-[76px] flex-col overflow-hidden rounded-md border border-border/80 bg-card text-left transition-colors hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                          className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                         >
-                          {img ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={fileUrl(img)} alt="" className="h-12 w-full object-cover" loading="lazy" />
-                          ) : (
-                            <div className="h-12 w-full border-b border-border/60 bg-muted/40" />
-                          )}
-                          <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-1.5 py-1">
+                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                            {img ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                            )}
+                          </div>
+                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                             <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
-                            <span className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
-                              <span className="truncate">{p.code}</span>
-                              <span className="shrink-0 font-semibold tabular-nums text-foreground/80">
-                                {moneyLabel(price)}
-                              </span>
+                            <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
+                            <span className="flex items-center justify-between gap-1">
+                              <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
                             </span>
+                            <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
                           </div>
                         </button>
                       );
@@ -1052,26 +1062,47 @@ function Matrix({
   if (!colours.length || !sizes.length) {
     return (
       <div className="p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="font-medium">{product.name}</div>
-          <button type="button" className="text-sm text-muted-foreground" onClick={onClose}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="truncate font-medium">{product.name}</div>
+          <button type="button" className="shrink-0 text-sm text-muted-foreground hover:text-foreground" onClick={onClose}>
             Close
           </button>
         </div>
-        <div className="grid gap-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           {product.variants.map((v) => {
             const qty = stockOf(v);
             const label = v.attributes.map((a) => a.option.label).join(" / ") || v.sku;
+            const sku = v.sku;
+            const barcode = v.barcodes.find((b) => b.primary)?.code || v.barcodes[0]?.code || "";
+            const img = v.imageUrl || product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url;
+            const price = Number(v.price ?? 0);
+            const status = qty <= 0 ? "Out of Stock" : qty <= 5 ? "Low Stock" : "Available";
+            const statusCls = qty <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : qty <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
             return (
               <button
                 key={v.id}
                 type="button"
                 disabled={!allowZero && qty <= 0}
                 onClick={() => onPick(v)}
-                className={`flex h-12 items-center justify-between rounded-lg border px-3 text-left ${!allowZero && qty <= 0 ? "bg-muted text-muted-foreground" : "bg-card hover:border-primary"}`}
+                className={`flex gap-2 rounded-lg border p-2 text-left transition-colors ${!allowZero && qty <= 0 ? "bg-muted text-muted-foreground" : "bg-card hover:border-primary/60 hover:bg-accent/30"}`}
               >
-                <span>{label}</span>
-                <span className="tabular-nums">{qty}</span>
+                <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                  {img ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate text-xs font-medium leading-tight">{label}</span>
+                  <span className="truncate text-[10px] leading-tight text-muted-foreground">{sku}{barcode && barcode !== sku ? ` · ${barcode}` : ""}</span>
+                  <span className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                  </span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {qty}</span>
+                </div>
               </button>
             );
           })}
@@ -1081,47 +1112,77 @@ function Matrix({
   }
   return (
     <div className="p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="font-medium">{product.name}</div>
-        <button type="button" className="text-sm text-muted-foreground" onClick={onClose}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="truncate font-medium">{product.name}</div>
+        <button type="button" className="shrink-0 text-sm text-muted-foreground hover:text-foreground" onClick={onClose}>
           Close
         </button>
       </div>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="p-1" />
-            {sizes.map((s) => (
-              <th key={s} className="p-1 uppercase">
-                {s}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {colours.map((c) => (
-            <tr key={c}>
-              <td className="p-1 font-medium capitalize">{c}</td>
-              {sizes.map((s) => {
-                const v = cell(c, s);
-                const qty = v ? stockOf(v) : 0;
-                return (
-                  <td key={s} className="p-1">
-                    <button
-                      type="button"
-                      disabled={!v || (!allowZero && qty <= 0)}
-                      onClick={() => v && onPick(v)}
-                      className={`h-12 w-full rounded-lg border ${!v || (!allowZero && qty <= 0) ? "bg-muted text-muted-foreground" : "bg-card hover:border-primary"}`}
-                    >
-                      {v ? qty : "—"}
-                    </button>
-                  </td>
-                );
-              })}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="p-1 text-left text-xs font-medium text-muted-foreground" />
+              {sizes.map((s) => (
+                <th key={s} className="p-1 text-center text-xs font-medium uppercase text-muted-foreground">
+                  {s}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {colours.map((c) => (
+              <tr key={c}>
+                <td className="p-1 text-xs font-medium capitalize text-muted-foreground">{c}</td>
+                {sizes.map((s) => {
+                  const v = cell(c, s);
+                  const qty = v ? stockOf(v) : 0;
+                  const img = v?.imageUrl || (product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url);
+                  const price = v ? Number(v.price ?? 0) : 0;
+                  const status = qty <= 0 ? "Out" : qty <= 5 ? "Low" : "OK";
+                  const statusCls = qty <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : qty <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                  return (
+                    <td key={s} className="p-1 align-top">
+                      <button
+                        type="button"
+                        disabled={!v || (!allowZero && qty <= 0)}
+                        onClick={() => v && onPick(v)}
+                        className={`flex min-h-[72px] w-full min-w-[92px] flex-col gap-1 rounded-lg border p-1.5 text-left transition-colors ${!v ? "bg-muted/30" : !allowZero && qty <= 0 ? "bg-muted text-muted-foreground" : "bg-card hover:border-primary/60 hover:bg-accent/30"}`}
+                      >
+                        {!v ? (
+                          <span className="flex h-full items-center justify-center text-muted-foreground">—</span>
+                        ) : (
+                          <>
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-8 w-8 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                {img ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                ) : (
+                                  <span className="flex h-full w-full items-center justify-center text-[9px] text-muted-foreground">No img</span>
+                                )}
+                              </span>
+                              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                <span className="truncate text-[11px] font-medium leading-tight">{v.sku}</span>
+                                <span className="truncate text-[10px] leading-tight text-muted-foreground">{v.barcodes.find((b) => b.primary)?.code || v.barcodes[0]?.code || ""}</span>
+                              </span>
+                            </span>
+                            <span className="flex items-center justify-between gap-1">
+                              <span className="text-[11px] font-semibold tabular-nums">{moneyLabel(price)}</span>
+                              <span className={`rounded-full border px-1 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                            </span>
+                            <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {qty}</span>
+                          </>
+                        )}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
