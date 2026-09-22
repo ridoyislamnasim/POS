@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Field, InfoTip, btnGhost, btnPrimary, inputClass } from "@/components/ui";
+import { WaveInput } from "@/components/ui/wave-input";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toastCreated, toastError, toastSuccess, toastWarn } from "@/lib/toast";
 import { SearchSelect } from "@/components/catalog/search-select";
@@ -126,6 +127,8 @@ export function ProductForm({ product }: { product?: ProductLoaded }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [dropVariant, setDropVariant] = useState<string | null>(null);
   const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
+  // Per-variant Auto-Fill toggle: when ON, the next pricing edit propagates to empty pricing fields
+  const [autoFillOn, setAutoFillOn] = useState<Record<string, boolean>>({});
   const initialSellingPrice = product?.sellingPrice ?? calcFinalSellingPrice(product?.retailPrice ?? "", product?.discount ?? "0");
   const [form, setForm] = useState(() => ({
     name: product?.name ?? "",
@@ -221,11 +224,12 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
         label: combo.map((o) => o.label).join(" / "),
         sku: `${form.code || "SKU"}-${combo.map((o) => o.value).join("-")}`.toUpperCase(),
         barcode: "",
-        price: calcFinalSellingPrice(form.retailPrice, form.discount),
-        cost: form.purchasePrice,
-        wholesale: form.wholesalePrice,
-        retail: form.retailPrice,
-        discount: form.discount,
+        // Default pricing = "0" per spec, but UI shows placeholder (not the 0) via display helper
+        price: "0",
+        cost: "0",
+        wholesale: "0",
+        retail: "0",
+        discount: "0",
         minStock: form.minStock,
         weight: "",
         imageUrl: "",
@@ -378,7 +382,7 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
                 optionIds: v.optionIds,
                 sku: v.sku,
                 barcode: v.barcode || undefined,
-                price: v.price,
+                price: calcFinalSellingPrice(v.retail, v.discount),
                 cost: v.cost,
                 wholesalePrice: v.wholesale || undefined,
                 retailPrice: v.retail || undefined,
@@ -444,8 +448,8 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
           barcode: v.barcodes?.[0]?.code ?? "",
           price: String(v.price ?? "0"),
           cost: String(v.cost ?? "0"),
-          wholesale: String(v.wholesalePrice ?? ""),
-          retail: String(v.retailPrice ?? ""),
+          wholesale: String(v.wholesalePrice ?? "0"),
+          retail: String(v.retailPrice ?? "0"),
           discount: String(v.discount ?? "0"),
           minStock: String(v.minStock ?? "0"),
           weight: v.weight ?? "",
@@ -644,175 +648,162 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
                 </div>
               ))}
           </div>
-          <button type="button" className={btnPrimary + " mt-2"} onClick={generateVariants}>
-            Generate combinations ({form.variants.length}
-            {form.variants.some((v) => !v.id.startsWith("new|"))
-              ? ` · ${form.variants.filter((v) => !v.id.startsWith("new|")).length} saved`
-              : ""}
-            {form.variants.some((v) => v.id.startsWith("new|"))
-              ? ` · ${form.variants.filter((v) => v.id.startsWith("new|")).length} new`
-              : ""})
-          </button>
-          {form.variants.length ? (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-      {form.variants.map((v) => (
-        <div
-          key={v.id}
-          className="rounded-md border p-2 bg-card shadow-sm"
-        >
-          {/* Header: variant name + New badge + Status + Delete */}
-          <div className="grid grid-cols-4 gap-1.5 text-xs mb-1">
-            <span className="font-medium line-clamp-1">{v.label}</span>
-            {v.id.startsWith("new|") ? (
-              <span
-                className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-              >
-                New
-              </span>
-            ) : null}
-            <span className="flex items-center gap-0.5">
-              <span className="h-2 w-2 rounded bg-green-500" />
-              <span className="text-[10px] font-medium">Active</span>
-            </span>
-            <button
-              type="button"
-              className="text-destructive p-0.5 text-xs"
-              onClick={() => setDropVariant(v.id)}
-            >
-              ×
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button type="button" className={btnPrimary} onClick={generateVariants}>
+              Generate combinations ({form.variants.length}
+              {form.variants.some((v) => !v.id.startsWith("new|"))
+                ? ` · ${form.variants.filter((v) => !v.id.startsWith("new|")).length} saved`
+                : ""}
+              {form.variants.some((v) => v.id.startsWith("new|"))
+                ? ` · ${form.variants.filter((v) => v.id.startsWith("new|")).length} new`
+                : ""})
             </button>
+            {form.variants.length ? (
+              <button
+                type="button"
+                onClick={handleBulkAutoFill}
+                className={`${btnGhost} h-8 gap-1.5 text-xs`}
+                title="Copy first entered price to all empty pricing fields across variants"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Auto Fill All
+              </button>
+            ) : null}
+          </div>
+          {form.variants.length ? (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {form.variants.map((v) => (
+        <div key={v.id} className="flex flex-col gap-2 rounded-lg border bg-card p-2.5 shadow-sm">
+          {/* Header — compact */}
+          <div className="flex items-start justify-between gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium leading-tight">{v.label}</span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {v.id.startsWith("new|") ? (
+                <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">New</span>
+              ) : null}
+              <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className={`h-2 w-2 rounded-full ${v.status === "ACTIVE" ? "bg-emerald-500" : "bg-zinc-400"}`} />
+                {v.status === "ACTIVE" ? "Active" : "Inactive"}
+              </span>
+              <button type="button" onClick={() => setDropVariant(v.id)} aria-label="Remove variant" className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive">
+                ×
+              </button>
+            </div>
           </div>
 
-          {/* SKU + Barcode on same row */}
+          {/* SKU + Barcode — same wave UI, compact */}
           <div className="grid grid-cols-2 gap-1.5">
-            <input
-              className={inputClass + " h-8"}
-              value={v.sku}
-              onChange={(e) => patchVar(v.id, { sku: e.target.value })}
-            />
-            <input
-              className={inputClass + " h-8"}
-              value={v.barcode}
-              onChange={(e) => patchVar(v.id, { barcode: e.target.value })}
-            />
+            <WaveInput label="SKU" value={v.sku} onChange={(val) => patchVar(v.id, { sku: val })} hideZero={false} />
+            <WaveInput label="Barcode" value={v.barcode} onChange={(val) => patchVar(v.id, { barcode: val })} hideZero={false} />
           </div>
 
-          {/* Price + Cost + Discount */}
-          <div className="grid grid-cols-3 gap-1.5">
-            <label className="block">
-              <span className="mb-0.5 block text-[10px] text-muted-foreground">Price</span>
-              <input
-                className={inputClass + " h-8" + (errors[`variant:${v.id}:price`] ? " border-destructive" : "")}
-                value={v.price}
-                onChange={(e) => patchVar(v.id, { price: e.target.value })}
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-0.5 block text-[10px] text-muted-foreground">Cost *</span>
-              <input
-                className={inputClass + " h-8" + (errors[`variant:${v.id}:cost`] ? " border-destructive" : "")}
+          {/* Pricing — placeholder-only, compact with Auto Fill */}
+          <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium text-muted-foreground">Pricing</span>
+              <button
+                type="button"
+                onClick={() => handleAutoFillToggle(v.id)}
+                aria-pressed={Boolean(autoFillOn[v.id])}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none transition-colors ${autoFillOn[v.id] ? "border-primary bg-primary text-primary-foreground shadow-sm" : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                title={autoFillOn[v.id] ? "Auto Fill ON — next price you type fills empty fields" : "Enable Auto Fill to copy first price to all fields"}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${autoFillOn[v.id] ? "bg-primary-foreground" : "bg-emerald-500"}`} />
+                Auto Fill {autoFillOn[v.id] ? "ON" : "OFF"}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              <WaveInput
+                label="Cost *"
                 value={v.cost}
-                onChange={(e) => patchVar(v.id, { cost: e.target.value })}
+                onChange={(val) => handlePricingChange(v.id, "cost", val)}
+                error={!!errors[`variant:${v.id}:cost`]}
                 type="number"
                 min="0"
                 step="0.01"
                 inputMode="decimal"
+                aria-label="Costing price"
               />
-            </label>
-            <label className="block">
-              <span className="mb-0.5 block text-[10px] text-muted-foreground">Discount</span>
-              <input
-                className={inputClass + " h-8"}
+              <WaveInput
+                label="Retail *"
+                value={v.retail}
+                onChange={(val) => handlePricingChange(v.id, "retail", val)}
+                error={!!errors[`variant:${v.id}:retail`]}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                aria-label="Retail price"
+              />
+              <WaveInput
+                label="Wholesale *"
+                value={v.wholesale}
+                onChange={(val) => handlePricingChange(v.id, "wholesale", val)}
+                error={!!errors[`variant:${v.id}:wholesale`]}
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                aria-label="Wholesale price"
+              />
+              <WaveInput
+                label="Discount %"
                 value={v.discount}
-                onChange={(e) => patchVar(v.id, { discount: e.target.value })}
+                onChange={(val) => handlePricingChange(v.id, "discount", val)}
                 type="number"
                 min="0"
                 max="100"
                 step="0.01"
                 inputMode="decimal"
+                aria-label="Discount"
               />
-            </label>
+              <WaveInput
+                label="Selling price"
+                value={calcFinalSellingPrice(v.retail, v.discount)}
+                onChange={() => {}}
+                readOnly
+                tabIndex={-1}
+                type="number"
+                aria-label="Selling price"
+                title="Auto-calculated: Retail - (Retail × Discount / 100)"
+              />
+            </div>
+            {autoFillOn[v.id] ? (
+              <p className="text-[10px] leading-tight text-muted-foreground">Auto Fill is ON — the first value you type copies to empty pricing fields. All fields stay independently editable.</p>
+            ) : null}
+            {variantPriceError(v.id) ? <p className="text-[11px] text-destructive">{variantPriceError(v.id)}</p> : null}
           </div>
 
-          {/* Wholesale + Retail (required per variant) */}
-          <div className="grid grid-cols-2 gap-1.5">
-            <label className="block">
-              <span className="mb-0.5 block text-[10px] text-muted-foreground">Wholesale *</span>
-              <input
-                className={inputClass + " h-8" + (errors[`variant:${v.id}:wholesale`] ? " border-destructive" : "")}
-                value={v.wholesale}
-                onChange={(e) => patchVar(v.id, { wholesale: e.target.value })}
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-0.5 block text-[10px] text-muted-foreground">Retail *</span>
-              <input
-                className={inputClass + " h-8" + (errors[`variant:${v.id}:retail`] ? " border-destructive" : "")}
-                value={v.retail}
-                onChange={(e) => patchVar(v.id, { retail: e.target.value })}
-                type="number"
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-              />
-            </label>
-          </div>
-          {variantPriceError(v.id) ? (
-            <p className="mt-1 text-[11px] text-destructive">{variantPriceError(v.id)}</p>
-          ) : null}
-
-          {/* Min Wt + Floor + Test */}
+          {/* Inventory — same wave UI, compact */}
           <div className="grid grid-cols-3 gap-1.5">
-            <input
-              className={inputClass + " h-8"}
+            <WaveInput
+              label="Min stock"
               value={v.minStock}
-              onChange={(e) => patchVar(v.id, { minStock: e.target.value })}
+              onChange={(val) => patchVar(v.id, { minStock: val === "" ? "0" : val })}
               type="number"
               min="0"
               step="1"
               inputMode="numeric"
+              aria-label="Min stock"
             />
-            <input
-              className={inputClass + " h-8"}
-              value={
-                Object.keys(v.opening).length > 0
-                  ? v.opening[Object.keys(v.opening)[0]] ?? "0"
-                  : "0"
-              }
-              onChange={(e) =>
+            <WaveInput
+              label="Opening"
+              value={Object.keys(v.opening).length > 0 ? (v.opening[Object.keys(v.opening)[0]] ?? "0") : "0"}
+              onChange={(val) =>
                 patchVar(v.id, {
-                  opening: {
-                    ...v.opening,
-                    [Object.keys(v.opening)[0] || ""]: e.target.value,
-                  },
+                  opening: { ...v.opening, [Object.keys(v.opening)[0] || ""]: val === "" ? "0" : val },
                 })
               }
               type="number"
               min="0"
               step="1"
               inputMode="numeric"
+              aria-label="Opening quantity"
             />
-            <div className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={v.status === "ACTIVE"}
-                onChange={(e) =>
-                  patchVar(v.id, {
-                    status: e.target.checked ? "ACTIVE" : "INACTIVE",
-                  })
-                }
-                className="h-3 w-3 rounded-border"
-              />
-              <span className="text-[10px] text-muted-foreground">Test</span>
-            </div>
+            <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2 text-[11px] font-medium">
+              <input type="checkbox" checked={v.status === "ACTIVE"} onChange={(e) => patchVar(v.id, { status: e.target.checked ? "ACTIVE" : "INACTIVE" })} className="h-3 w-3 rounded border" />
+              Active
+            </label>
           </div>
         </div>
       ))}
@@ -830,16 +821,16 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
 <Section title="5. Pricing">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Field label={form.type === "VARIABLE" ? "Purchase / Cost Price" : "Purchase / Cost Price *"} error={errors.purchasePrice}>
-            <input className={inputClass} value={form.purchasePrice} onChange={(e) => set("purchasePrice", e.target.value)} placeholder="Enter purchase / cost price" type="number" min="0" step="0.01" inputMode="decimal" />
+            <input className={inputClass} value={form.purchasePrice} onChange={(e) => set("purchasePrice", e.target.value)} placeholder="Enter purchase / cost price" type="number" min="0" step="0.01" inputMode="decimal" onWheel={noWheel} />
           </Field>
           <Field label={form.type === "VARIABLE" ? "Wholesale Price" : "Wholesale Price *"} error={errors.wholesalePrice}>
-            <input className={inputClass} value={form.wholesalePrice} onChange={(e) => set("wholesalePrice", e.target.value)} placeholder="Enter wholesale price" type="number" min="0" step="0.01" inputMode="decimal" />
+            <input className={inputClass} value={form.wholesalePrice} onChange={(e) => set("wholesalePrice", e.target.value)} placeholder="Enter wholesale price" type="number" min="0" step="0.01" inputMode="decimal" onWheel={noWheel} />
           </Field>
           <Field label={form.type === "VARIABLE" ? "Retail Price" : "Retail Price *"} error={errors.retailPrice}>
-            <input className={inputClass} value={form.retailPrice} onChange={(e) => set("retailPrice", e.target.value)} placeholder="Enter retail price" type="number" min="0" step="0.01" inputMode="decimal" />
+            <input className={inputClass} value={form.retailPrice} onChange={(e) => set("retailPrice", e.target.value)} placeholder="Enter retail price" type="number" min="0" step="0.01" inputMode="decimal" onWheel={noWheel} />
           </Field>
           <Field label="Discount %">
-            <input className={inputClass} value={form.discount} onChange={(e) => set("discount", e.target.value)} type="number" min="0" max="100" />
+            <input className={inputClass} value={form.discount} onChange={(e) => set("discount", e.target.value)} type="number" min="0" max="100" onWheel={noWheel} />
             {errors.discount ? <p className="text-xs text-destructive">{errors.discount}</p> : null}
           </Field>
           <Field label="Final Selling Price">
@@ -869,14 +860,15 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
                   min="0"
                   step="1"
                   inputMode="numeric"
+                  onWheel={noWheel}
                 />
               </Field>
             ))}
             <Field label="Minimum stock" error={errors.minStock}>
-              <input className={inputClass} value={form.minStock} onChange={(e) => set("minStock", e.target.value)} type="number" min="0" step="1" inputMode="numeric" />
+              <input className={inputClass} value={form.minStock} onChange={(e) => set("minStock", e.target.value)} type="number" min="0" step="1" inputMode="numeric" onWheel={noWheel} />
             </Field>
             <Field label="Reorder / stock alert" error={errors.reorderLevel}>
-              <input className={inputClass} value={form.reorderLevel} onChange={(e) => set("reorderLevel", e.target.value)} type="number" min="0" step="1" inputMode="numeric" />
+              <input className={inputClass} value={form.reorderLevel} onChange={(e) => set("reorderLevel", e.target.value)} type="number" min="0" step="1" inputMode="numeric" onWheel={noWheel} />
             </Field>
           </div>
         ) : (
@@ -938,6 +930,134 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
       />
     </div>
   );
+
+  // Pricing display helpers — default is "0" but input shows placeholder (empty) until user types
+  function isPricingEmpty(val: unknown): boolean {
+    const s = String(val ?? "").trim();
+    return s === "" || s === "0" || s === "0.00" || s === "0.0";
+  }
+  function pricingDisplay(val: string | undefined): string {
+    return isPricingEmpty(val) ? "" : String(val ?? "");
+  }
+  function noWheel(e: React.WheelEvent<HTMLInputElement>) {
+    (e.target as HTMLInputElement).blur();
+  }
+
+  function handleAutoFillToggle(id: string) {
+    const willEnable = !autoFillOn[id];
+    setAutoFillOn((s) => ({ ...s, [id]: willEnable }));
+    if (!willEnable) return;
+    // On enable: if a pricing value already exists (non-default), copy first non-empty value to empty fields (initial population only) - Warehouse removed, Selling Price is derived
+    setForm((s) => {
+      const row = s.variants.find((r) => r.id === id);
+      if (!row) return s;
+      const fields: (keyof VariantRow)[] = ["cost", "retail", "wholesale", "discount"];
+      const firstVal = fields.map((f) => String((row[f] as string) ?? "").trim()).find((v) => v !== "" && !isPricingEmpty(v));
+      if (!firstVal) return s;
+      const patch: Partial<VariantRow> = {};
+      let needs = false;
+      for (const f of fields) {
+        if (isPricingEmpty(row[f] as string)) {
+          (patch as Record<string, string>)[f] = firstVal;
+          needs = true;
+        }
+      }
+      if (!needs) return s;
+      // keep derived Selling Price in sync
+      const nextRetail = (patch.retail as string) ?? row.retail;
+      const nextDiscount = (patch.discount as string) ?? row.discount;
+      (patch as Record<string, string>).price = calcFinalSellingPrice(nextRetail, nextDiscount);
+      return { ...s, variants: s.variants.map((r) => (r.id === id ? { ...r, ...patch } : r)) };
+    });
+  }
+
+  function handleBulkAutoFill() {
+    // Per-field independent auto-fill: Cost→Cost, Retail→Retail, Wholesale→Wholesale, Discount→Discount.
+    // Do not copy one field's value into another. Selling Price is derived via calcFinalSellingPrice.
+    const findFirst = (getter: (v: VariantRow) => string, fallback: string) => {
+      for (const v of form.variants) {
+        const val = String(getter(v) ?? "").trim();
+        if (val !== "" && !isPricingEmpty(val)) return val;
+      }
+      const fb = String(fallback ?? "").trim();
+      return fb !== "" && !isPricingEmpty(fb) ? fb : "";
+    };
+    const costSource = findFirst((v) => v.cost, form.purchasePrice);
+    const retailSource = findFirst((v) => v.retail, form.retailPrice);
+    const wholesaleSource = findFirst((v) => v.wholesale, form.wholesalePrice);
+    const discountSource = findFirst((v) => v.discount, form.discount);
+    if (!costSource && !retailSource && !wholesaleSource && !discountSource) return;
+    setForm((s) => ({
+      ...s,
+      variants: s.variants.map((r) => {
+        const patch: Partial<VariantRow> = {};
+        if (isPricingEmpty(r.cost) && costSource) patch.cost = costSource;
+        if (isPricingEmpty(r.retail) && retailSource) patch.retail = retailSource;
+        if (isPricingEmpty(r.wholesale) && wholesaleSource) patch.wholesale = wholesaleSource;
+        if (isPricingEmpty(r.discount) && discountSource) patch.discount = discountSource;
+        if (Object.keys(patch).length) {
+          const nextRetail = (patch.retail as string) ?? r.retail;
+          const nextDiscount = (patch.discount as string) ?? r.discount;
+          (patch as Record<string, string>).price = calcFinalSellingPrice(nextRetail, nextDiscount);
+          return { ...r, ...patch };
+        }
+        return r;
+      }),
+    }));
+    // Turn on per-variant auto-fill so next manual entry still follows the pattern for any still-empty variant
+    setAutoFillOn((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      for (const v of form.variants) next[v.id] = true;
+      return next;
+    });
+  }
+
+  function handlePricingChange(
+    id: string,
+    field: "cost" | "wholesale" | "retail" | "discount",
+    value: string,
+  ) {
+    // Empty input means default 0 — keep underlying value as "0" so pricing logic sees 0, but display stays placeholder
+    const stored = value.trim() === "" ? "0" : value;
+    const isAuto = Boolean(autoFillOn[id]);
+    const isUserEntry = value.trim() !== "" && !isPricingEmpty(value) && value.trim() !== "0";
+    if (isAuto && isUserEntry) {
+      setForm((s) => {
+        const row = s.variants.find((r) => r.id === id);
+        if (!row) return s;
+        const fields: (keyof VariantRow)[] = ["cost", "retail", "wholesale", "discount"];
+        const otherEmpty = fields
+          .filter((f) => f !== field)
+          .every((f) => isPricingEmpty(row[f] as string));
+        // Only auto-fill on the first entry (all other pricing fields still default/empty) — keeps edits independent afterwards
+        if (otherEmpty) {
+          const patch: Record<string, string> = {};
+          for (const f of fields) patch[f as string] = stored;
+          const nextRetail = field === "retail" ? stored : (patch.retail as string) ?? row.retail;
+          const nextDiscount = field === "discount" ? stored : (patch.discount as string) ?? row.discount;
+          patch.price = calcFinalSellingPrice(nextRetail, nextDiscount);
+          return { ...s, variants: s.variants.map((r) => (r.id === id ? { ...r, ...patch, [field]: stored } : r)) };
+        }
+        const patch: Partial<VariantRow> = { [field]: stored } as Partial<VariantRow>;
+        if (field === "retail" || field === "discount") {
+          const nextRetail = field === "retail" ? stored : row.retail;
+          const nextDiscount = field === "discount" ? stored : row.discount;
+          (patch as Record<string, string>).price = calcFinalSellingPrice(nextRetail, nextDiscount);
+        }
+        return { ...s, variants: s.variants.map((r) => (r.id === id ? { ...r, ...patch } : r)) };
+      });
+      return;
+    }
+    const patch: Partial<VariantRow> = { [field]: stored } as Partial<VariantRow>;
+    if (field === "retail" || field === "discount") {
+      // keep derived Selling Price in sync - single source calcFinalSellingPrice
+      const row = form.variants.find((r) => r.id === id);
+      const nextRetail = field === "retail" ? stored : row?.retail ?? "0";
+      const nextDiscount = field === "discount" ? stored : row?.discount ?? "0";
+      (patch as Record<string, string>).price = calcFinalSellingPrice(nextRetail, nextDiscount);
+    }
+    patchVar(id, patch);
+  }
 
   function patchVar(id: string, patch: Partial<VariantRow>) {
     setForm((s) => ({

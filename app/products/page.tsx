@@ -76,7 +76,7 @@ export default function ProductsPage() {
 
   return (
     <AppShell>
-      <PageHeader title="Products" description="Catalogue, variants, and archive.">
+      <PageHeader title="Products" description="Catalogue, variants, pricing, and archive.">
         <Button variant="outline" disabled={!list.rows.length} onClick={() => setPrintLabels({ title: "Print all barcode labels", labels: list.rows.flatMap(labelsFor) })}>
           <Printer className="mr-1.5 h-4 w-4" aria-hidden />
           Print labels

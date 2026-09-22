@@ -256,8 +256,20 @@ const DRAFTS: Draft[] = [
   },
   {
     href: "/products",
-    blurb: "Catalogue, variants, and archive.",
-    canDo: ["Add or edit a product", "Archive instead of deleting", "Print barcode labels"],
+    blurb: "Catalogue, variants, pricing, and archive.",
+    canDo: [
+      "Add or edit a product",
+      "Set Cost, Retail, and Wholesale prices",
+      "Apply a discount to the Retail Price",
+      "Selling Price is automatically calculated after discount and is the actual price used in POS billing",
+      "Archive products instead of deleting them",
+      "Print barcode labels",
+      "Cost: Your purchase/inventory cost; used for stock valuation and profit calculation.",
+      "Retail Price: Base/customer price before discount.",
+      "Wholesale Price: Price for wholesale/B2B sales.",
+      "Discount: Percentage deducted from Retail Price.",
+      "Selling Price: Final price after discount; automatically calculated and used for POS billing. It is not manually editable.",
+    ],
     next: [
       { href: "/products/new", label: "Create product", permission: "catalog.manage" },
       { href: "/categories", label: "Categories", permission: "catalog.manage" },
@@ -265,7 +277,7 @@ const DRAFTS: Draft[] = [
     ],
     tasks: ["add-product"],
     emptyHint: "Create a product with a category. Variants are optional.",
-    keywords: ["sku", "catalog"],
+    keywords: ["sku", "catalog", "pricing", "cost", "retail", "wholesale", "discount", "selling price"],
   },
   {
     href: "/products/new",
