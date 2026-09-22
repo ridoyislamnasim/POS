@@ -34,6 +34,7 @@ type VariantRow = {
   retail: string;
   discount: string;
   minStock: string;
+  reorderLevel: string;
   weight: string;
   imageUrl: string;
   status: "ACTIVE" | "INACTIVE";
@@ -232,10 +233,11 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
         retail: "0",
         discount: "0",
         minStock: form.minStock,
+        reorderLevel: form.reorderLevel,
         weight: "",
         imageUrl: "",
         status: "ACTIVE",
-        opening: form.opening,
+        opening: Object.keys(form.opening).length ? form.opening : emptyOpening(locs.data ?? []),
       };
     });
     setForm((s) => ({ ...s, variants: rows }));
@@ -300,9 +302,10 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
           }
           if (
             !isNonNegativeNumOrEmpty(v.minStock) ||
+            !isNonNegativeNumOrEmpty(v.reorderLevel) ||
             Object.values(v.opening ?? {}).some((q) => !isNonNegativeNumOrEmpty(q))
           ) {
-            nextErrors[`variant:${v.id}:stock`] = `Variant "${v.label}" has an invalid min stock or opening qty`;
+            nextErrors[`variant:${v.id}:stock`] = `Variant "${v.label}" has an invalid min/reorder/opening qty`;
           }
           if (missing.length && !firstVariantError) {
             firstVariantError = `Variant "${v.label}" is missing required pricing: ${missing.join(", ")}`;
@@ -396,7 +399,7 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
                   locationId,
                   quantity,
                   unitCost: v.cost,
-                  reorderLevel: form.reorderLevel,
+                  reorderLevel: v.reorderLevel,
                 })),
               }))
             : [],
@@ -419,9 +422,25 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
   const hydratedProductId = useRef<string | null>(null);
   useEffect(() => {
     if (!locations.length) return;
-    // Create mode: just seed empty opening stock once locations arrive.
+    // Create mode: seed opening stock and backfill variant openings when locations arrive.
     if (!product) {
-      setForm((s) => (Object.keys(s.opening).length ? s : { ...s, opening: emptyOpening(locations) }));
+      setForm((s) => {
+        let next: typeof s = s;
+        if (!Object.keys(s.opening).length) next = { ...next, opening: emptyOpening(locations) };
+        if (next.variants.length) {
+          let changed = false;
+          const patched = next.variants.map((v) => {
+            const need = locations.some((l) => !(l.id in v.opening));
+            if (!need && Object.keys(v.opening).length) return v;
+            const opening: Record<string, string> = {};
+            for (const l of locations) opening[l.id] = v.opening[l.id] ?? next.opening[l.id] ?? "0";
+            if (JSON.stringify(opening) !== JSON.stringify(v.opening)) changed = true;
+            return { ...v, opening };
+          });
+          if (changed) next = { ...next, variants: patched };
+        }
+        return next === s ? s : next;
+      });
       return;
     }
     // Edit mode: hydrate saved variants (with full details), attribute picks,
@@ -453,6 +472,7 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
           retail: String(v.retailPrice ?? "0"),
           discount: String(v.discount ?? "0"),
           minStock: String(v.minStock ?? "0"),
+          reorderLevel: String((v as any).stock?.[0]?.reorderLevel ?? (v.stock as any)?.[0]?.reorderLevel ?? product?.reorderLevel ?? "0"),
           weight: v.weight ?? "",
           imageUrl: v.imageUrl ?? "",
           status: v.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
@@ -778,37 +798,56 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
             {variantPriceError(v.id) ? <p className="text-[11px] text-destructive">{variantPriceError(v.id)}</p> : null}
           </div>
 
-          {/* Inventory — same wave UI, compact */}
+          {/* Inventory — variant-wise: Min/Reorder + Opening per outlet */}
           <div className="grid grid-cols-3 gap-1.5">
-            <WaveInput
-              label="Min stock"
-              value={v.minStock}
-              onChange={(val) => patchVar(v.id, { minStock: val === "" ? "0" : val })}
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              aria-label="Min stock"
-            />
-            <WaveInput
-              label="Opening"
-              value={Object.keys(v.opening).length > 0 ? (v.opening[Object.keys(v.opening)[0]] ?? "0") : "0"}
-              onChange={(val) =>
-                patchVar(v.id, {
-                  opening: { ...v.opening, [Object.keys(v.opening)[0] || ""]: val === "" ? "0" : val },
-                })
-              }
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              aria-label="Opening quantity"
-            />
+            {form.trackInventory ? (
+              <>
+                <WaveInput
+                  label="Min stock"
+                  value={v.minStock}
+                  onChange={(val) => patchVar(v.id, { minStock: val === "" ? "0" : val })}
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  aria-label="Min stock"
+                />
+                <WaveInput
+                  label="Reorder lvl"
+                  value={v.reorderLevel}
+                  onChange={(val) => patchVar(v.id, { reorderLevel: val === "" ? "0" : val })}
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  aria-label="Reorder level"
+                />
+              </>
+            ) : (
+              <div className="col-span-2 flex items-center text-[11px] text-muted-foreground">Inventory tracking off</div>
+            )}
             <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border bg-background px-2 text-[11px] font-medium">
               <input type="checkbox" checked={v.status === "ACTIVE"} onChange={(e) => patchVar(v.id, { status: e.target.checked ? "ACTIVE" : "INACTIVE" })} className="h-3 w-3 rounded border" />
               Active
             </label>
           </div>
+          {form.trackInventory ? (
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {locations.map((l) => (
+                <WaveInput
+                  key={l.id}
+                  label={`Opening — ${l.name}`}
+                  value={v.opening[l.id] ?? "0"}
+                  onChange={(val) => patchVar(v.id, { opening: { ...v.opening, [l.id]: val === "" ? "0" : val } })}
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="numeric"
+                  aria-label={`Opening ${l.name}`}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>
@@ -853,28 +892,39 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
       <Section title="6. Inventory">
         {errors.opening ? <p className="mb-2 text-xs text-destructive">{errors.opening}</p> : null}
         {form.trackInventory ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {locations.map((l) => (
-              <Field key={l.id} label={`Opening qty — ${l.name}`}>
-                <input
-                  className={inputClass}
-                  value={form.opening[l.id] ?? "0"}
-                  onChange={(e) => setForm((s) => ({ ...s, opening: { ...s.opening, [l.id]: e.target.value } }))}
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="numeric"
-                  onWheel={noWheel}
-                />
+          form.type === "VARIABLE" ? (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Opening stock, minimum stock and reorder level are managed <b>per variant</b> above — each variant has its own stock per outlet.
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Tip: Set opening quantity and stock alerts inside each variant card. Leave empty for zero.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {locations.map((l) => (
+                <Field key={l.id} label={`Opening qty — ${l.name}`}>
+                  <input
+                    className={inputClass}
+                    value={form.opening[l.id] ?? "0"}
+                    onChange={(e) => setForm((s) => ({ ...s, opening: { ...s.opening, [l.id]: e.target.value } }))}
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    onWheel={noWheel}
+                  />
+                </Field>
+              ))}
+              <Field label="Minimum stock" error={errors.minStock}>
+                <input className={inputClass} value={form.minStock} onChange={(e) => set("minStock", e.target.value)} type="number" min="0" step="1" inputMode="numeric" onWheel={noWheel} />
               </Field>
-            ))}
-            <Field label="Minimum stock" error={errors.minStock}>
-              <input className={inputClass} value={form.minStock} onChange={(e) => set("minStock", e.target.value)} type="number" min="0" step="1" inputMode="numeric" onWheel={noWheel} />
-            </Field>
-            <Field label="Reorder / stock alert" error={errors.reorderLevel}>
-              <input className={inputClass} value={form.reorderLevel} onChange={(e) => set("reorderLevel", e.target.value)} type="number" min="0" step="1" inputMode="numeric" onWheel={noWheel} />
-            </Field>
-          </div>
+              <Field label="Reorder / stock alert" error={errors.reorderLevel}>
+                <input className={inputClass} value={form.reorderLevel} onChange={(e) => set("reorderLevel", e.target.value)} type="number" min="0" step="1" inputMode="numeric" onWheel={noWheel} />
+              </Field>
+            </div>
+          )
         ) : (
           <p className="text-xs text-muted-foreground">Inventory tracking is off for this product.</p>
         )}

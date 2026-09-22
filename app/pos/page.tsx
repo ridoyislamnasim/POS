@@ -21,6 +21,8 @@ type Product = {
   id: string;
   name: string;
   code: string;
+  category?: string | null;
+  categoryRef?: { name: string } | null;
   trackInventory?: boolean;
   allowNegativeStock?: boolean;
   taxCategory?: { rate: string } | null;
@@ -669,52 +671,211 @@ const cartParts = useMemo(() => {
                   />
                 </div>
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-                  <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
-                    {!catalog.length ? (
-                      <div className="col-span-full">
-                        <EmptyState title="No products" hint={emptyHintFor("/pos")} />
-                      </div>
-                    ) : null}
-                    {catalog.map((p) => {
-                      const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
-                      const price = Number(p.variants[0]?.price ?? 0);
-                      const locationId = station().locationId;
-                      const totalStock = p.variants.reduce((sum, v) => {
-                        const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
-                        return sum + Number(row?.quantity ?? 0);
-                      }, 0);
-                      const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
-                      const statusCls =
-                        totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => pickProduct(p)}
-                          className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                        >
-                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
-                            {img ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
-                            )}
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1.5">
+                      {!catalog.length ? (
+                        <div className="py-6">
+                          <EmptyState title="No products" hint={emptyHintFor("/pos")} />
+                        </div>
+                      ) : null}
+                      {(() => {
+                        const grouped = new Map<string, typeof catalog>();
+                        for (const p of catalog) {
+                          const cat = p.category ?? p.categoryRef?.name ?? "Uncategorized";
+                          const key = String(cat || "Uncategorized");
+                          if (!grouped.has(key)) grouped.set(key, []);
+                          grouped.get(key)!.push(p);
+                        }
+                        const showGrouped = grouped.size > 0;
+                        if (showGrouped) {
+                          const entries = Array.from(grouped.entries());
+                          const firstTwo = entries.slice(0, 2);
+                          const rest = entries.slice(2);
+                          return (
+                            <div className="space-y-3 overflow-x-hidden">
+                              {firstTwo.map(([catName, items]) => (
+                                <div key={catName} className="overflow-x-hidden rounded-md border bg-card p-2 lg:overflow-visible">
+                                  <div className="mb-1.5 flex items-center gap-2">
+                                    <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">{catName}</h3>
+                                    <span className="h-px flex-1 bg-border/60" />
+                                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
+                                  </div>
+                                  <div className="flex gap-2 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-x snap-x snap-mandatory lg:hidden">
+                                    {items.map((p) => {
+                                      const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                                      const price = Number(p.variants[0]?.price ?? 0);
+                                      const locationId = station().locationId;
+                                      const totalStock = p.variants.reduce((sum, v) => {
+                                        const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                                        return sum + Number(row?.quantity ?? 0);
+                                      }, 0);
+                                      const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
+                                      const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                                      return (
+                                        <button
+                                          key={p.id}
+                                          type="button"
+                                          onClick={() => pickProduct(p)}
+                                          className="group flex w-[150px] shrink-0 snap-start gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                        >
+                                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                            {img ? (
+                                              // eslint-disable-next-line @next/next/no-img-element
+                                              <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                            ) : (
+                                              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                                            )}
+                                          </div>
+                                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                            <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                                            <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code}</span>
+                                            <span className="flex items-center justify-between gap-1">
+                                              <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                                              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                                            </span>
+                                            <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="hidden lg:grid lg:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] lg:gap-1.5">
+                                    {items.map((p) => {
+                                      const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                                      const price = Number(p.variants[0]?.price ?? 0);
+                                      const locationId = station().locationId;
+                                      const totalStock = p.variants.reduce((sum, v) => {
+                                        const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                                        return sum + Number(row?.quantity ?? 0);
+                                      }, 0);
+                                      const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
+                                      const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                                      return (
+                                        <button
+                                          key={p.id}
+                                          type="button"
+                                          onClick={() => pickProduct(p)}
+                                          className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                        >
+                                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                            {img ? (
+                                              // eslint-disable-next-line @next/next/no-img-element
+                                              <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                            ) : (
+                                              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                                            )}
+                                          </div>
+                                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                            <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                                            <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code}</span>
+                                            <span className="flex items-center justify-between gap-1">
+                                              <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                                              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                                            </span>
+                                            <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                              {rest.length ? (
+                                <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                                  {rest.map(([catName, items]) => (
+                                    <div key={catName} className="min-w-0 overflow-hidden rounded-md border bg-card p-2">
+                                      <div className="mb-1.5 flex items-center gap-2">
+                                        <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">{catName}</h3>
+                                        <span className="h-px flex-1 bg-border/60" />
+                                        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
+                                      </div>
+                                      <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] lg:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
+                                        {items.map((p) => {
+                                          const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                                          const price = Number(p.variants[0]?.price ?? 0);
+                                          const locationId = station().locationId;
+                                          const totalStock = p.variants.reduce((sum, v) => {
+                                            const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                                            return sum + Number(row?.quantity ?? 0);
+                                          }, 0);
+                                          const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
+                                          const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                                          return (
+                                            <button
+                                              key={p.id}
+                                              type="button"
+                                              onClick={() => pickProduct(p)}
+                                              className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                            >
+                                              <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                                {img ? (
+                                                  // eslint-disable-next-line @next/next/no-img-element
+                                                  <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                                ) : (
+                                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                                                )}
+                                              </div>
+                                              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                                <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                                                <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
+                                                <span className="flex items-center justify-between gap-1">
+                                                  <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                                                  <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                                                </span>
+                                                <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
+                                              </div>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
+                            {catalog.map((p) => {
+                              const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                              const price = Number(p.variants[0]?.price ?? 0);
+                              const locationId = station().locationId;
+                              const totalStock = p.variants.reduce((sum, v) => {
+                                const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                                return sum + Number(row?.quantity ?? 0);
+                              }, 0);
+                              const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
+                              const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => pickProduct(p)}
+                                  className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                >
+                                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                    {img ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                                    )}
+                                  </div>
+                                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                    <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                                    <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
+                                    <span className="flex items-center justify-between gap-1">
+                                      <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                                      <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                                    </span>
+                                    <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
+                                  </div>
+                                </button>
+                              );
+                            })}
                           </div>
-                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                            <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
-                            <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
-                            <span className="flex items-center justify-between gap-1">
-                              <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
-                              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
-                            </span>
-                            <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                        );
+                      })()}
                   
                 </div>
               )}
