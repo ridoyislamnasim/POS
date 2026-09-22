@@ -199,11 +199,11 @@ export default function PosPage() {
             };
           }),
           ...(store.txDiscountType === "flat" &&
-          Number(store.txDiscountAmount || 0) > 0
+            Number(store.txDiscountAmount || 0) > 0
             ? { transactionDiscount: store.txDiscountAmount }
             : {}),
           ...(store.txDiscountType === "percent" &&
-          Number(store.txDiscountPercent || 0) > 0
+            Number(store.txDiscountPercent || 0) > 0
             ? { transactionDiscountPercent: store.txDiscountPercent }
             : {}),
           ...(store.txDiscountReason ? { transactionDiscountReason: store.txDiscountReason } : {}),
@@ -249,27 +249,27 @@ export default function PosPage() {
     onError: (e) => toastPos("error", getApiErrorMessage(e, "Hold failed")),
   });
 
-const cartParts = useMemo(() => {
-  const lines = store.cart.map((l) =>
-    lineCharge({
-      unitPrice: Number(l.unitPrice),
-      qty: l.qty,
-      discount: (l.discountType ?? "flat") === "flat" ? Number(l.discountAmount || 0) : 0,
-      discountPercent: (l.discountType ?? "flat") === "percent" ? Number(l.discountPercent || 0) : 0,
-      taxRatePercent: Number(l.taxRate || 0),
-    }),
-  );
-  const subtotal = roundMoney(lines.reduce((s, c) => s + c.taxable, 0));
-  const tax = roundMoney(lines.reduce((s, c) => s + c.tax, 0));
-  const lineDiscount = roundMoney(lines.reduce((s, c) => s + c.discount, 0));
-  const billDiscount = transactionDiscountAmount({
-    subtotal,
-    flat: store.txDiscountType === "flat" ? Number(store.txDiscountAmount || 0) : 0,
-    percent: store.txDiscountType === "percent" ? Number(store.txDiscountPercent || 0) : 0,
-  });
-  const total = roundMoney(subtotal + tax - billDiscount);
-  return { lines, subtotal, tax, lineDiscount, billDiscount, total };
-}, [store.cart, store.txDiscountType, store.txDiscountAmount, store.txDiscountPercent]);
+  const cartParts = useMemo(() => {
+    const lines = store.cart.map((l) =>
+      lineCharge({
+        unitPrice: Number(l.unitPrice),
+        qty: l.qty,
+        discount: (l.discountType ?? "flat") === "flat" ? Number(l.discountAmount || 0) : 0,
+        discountPercent: (l.discountType ?? "flat") === "percent" ? Number(l.discountPercent || 0) : 0,
+        taxRatePercent: Number(l.taxRate || 0),
+      }),
+    );
+    const subtotal = roundMoney(lines.reduce((s, c) => s + c.taxable, 0));
+    const tax = roundMoney(lines.reduce((s, c) => s + c.tax, 0));
+    const lineDiscount = roundMoney(lines.reduce((s, c) => s + c.discount, 0));
+    const billDiscount = transactionDiscountAmount({
+      subtotal,
+      flat: store.txDiscountType === "flat" ? Number(store.txDiscountAmount || 0) : 0,
+      percent: store.txDiscountType === "percent" ? Number(store.txDiscountPercent || 0) : 0,
+    });
+    const total = roundMoney(subtotal + tax - billDiscount);
+    return { lines, subtotal, tax, lineDiscount, billDiscount, total };
+  }, [store.cart, store.txDiscountType, store.txDiscountAmount, store.txDiscountPercent]);
   const cartTotal = cartParts.total;
   const totalUnits = useMemo(() => store.cart.reduce((s, l) => s + (Number(l.qty) || 0), 0), [store.cart]);
   const catalog = products.data ?? [];
@@ -672,34 +672,123 @@ const cartParts = useMemo(() => {
                 </div>
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1.5">
-                      {!catalog.length ? (
-                        <div className="py-6">
-                          <EmptyState title="No products" hint={emptyHintFor("/pos")} />
-                        </div>
-                      ) : null}
-                      {(() => {
-                        const grouped = new Map<string, typeof catalog>();
-                        for (const p of catalog) {
-                          const cat = p.category ?? p.categoryRef?.name ?? "Uncategorized";
-                          const key = String(cat || "Uncategorized");
-                          if (!grouped.has(key)) grouped.set(key, []);
-                          grouped.get(key)!.push(p);
-                        }
-                        const showGrouped = grouped.size > 0;
-                        if (showGrouped) {
-                          const entries = Array.from(grouped.entries());
-                          const firstTwo = entries.slice(0, 2);
-                          const rest = entries.slice(2);
-                          return (
-                            <div className="space-y-3 overflow-x-hidden">
-                              {firstTwo.map(([catName, items]) => (
-                                <div key={catName} className="overflow-x-hidden rounded-md border bg-card p-2 lg:overflow-visible">
+                  {!catalog.length ? (
+                    <div className="py-6">
+                      <EmptyState title="No products" hint={emptyHintFor("/pos")} />
+                    </div>
+                  ) : null}
+                  {(() => {
+                    const grouped = new Map<string, typeof catalog>();
+                    for (const p of catalog) {
+                      const cat = p.category ?? p.categoryRef?.name ?? "Uncategorized";
+                      const key = String(cat || "Uncategorized");
+                      if (!grouped.has(key)) grouped.set(key, []);
+                      grouped.get(key)!.push(p);
+                    }
+                    const showGrouped = grouped.size > 0;
+                    if (showGrouped) {
+                      const entries = Array.from(grouped.entries());
+                      const firstTwo = entries.slice(0, 2);
+                      const rest = entries.slice(2);
+                      return (
+                        <div className="space-y-3 overflow-x-hidden">
+                          {firstTwo.map(([catName, items]) => (
+                            <div key={catName} className="overflow-x-hidden rounded-md border bg-card p-2 lg:overflow-visible">
+                              <div className="mb-1.5 flex items-center gap-2">
+                                <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">{catName}</h3>
+                                <span className="h-px flex-1 bg-border/60" />
+                                <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
+                              </div>
+                              <div className="flex gap-2 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-x snap-x snap-mandatory lg:hidden">
+                                {items.map((p) => {
+                                  const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                                  const price = Number(p.variants[0]?.price ?? 0);
+                                  const locationId = station().locationId;
+                                  const totalStock = p.variants.reduce((sum, v) => {
+                                    const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                                    return sum + Number(row?.quantity ?? 0);
+                                  }, 0);
+                                  const status = totalStock <= 0 ? "OOS" : totalStock <= 5 ? "Low Stock" : "Avail.";
+                                  const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => pickProduct(p)}
+                                      className="group flex w-[150px] shrink-0 snap-start gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                    >
+                                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                        {img ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                        ) : (
+                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                                        )}
+                                      </div>
+                                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                        <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                                        <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code}</span>
+                                        <span className="flex items-center justify-between gap-1">
+                                          <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                                          <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                                        </span>
+                                        <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="hidden lg:grid lg:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] lg:gap-1.5">
+                                {items.map((p) => {
+                                  const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                                  const price = Number(p.variants[0]?.price ?? 0);
+                                  const locationId = station().locationId;
+                                  const totalStock = p.variants.reduce((sum, v) => {
+                                    const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                                    return sum + Number(row?.quantity ?? 0);
+                                  }, 0);
+                                  const status = totalStock <= 0 ? "OOS" : totalStock <= 5 ? "Low Stock" : "Avail.";
+                                  const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => pickProduct(p)}
+                                      className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                    >
+                                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                        {img ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                        ) : (
+                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                                        )}
+                                      </div>
+                                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                        <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                                        <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code}</span>
+                                        <span className="flex items-center justify-between gap-1">
+                                          <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                                          <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                                        </span>
+                                        <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                          {rest.length ? (
+                            <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                              {rest.map(([catName, items]) => (
+                                <div key={catName} className="min-w-0 overflow-hidden rounded-md border bg-card p-2">
                                   <div className="mb-1.5 flex items-center gap-2">
                                     <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">{catName}</h3>
                                     <span className="h-px flex-1 bg-border/60" />
                                     <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
                                   </div>
-                                  <div className="flex gap-2 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-x snap-x snap-mandatory lg:hidden">
+                                  <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] lg:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
                                     {items.map((p) => {
                                       const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
                                       const price = Number(p.variants[0]?.price ?? 0);
@@ -708,46 +797,7 @@ const cartParts = useMemo(() => {
                                         const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
                                         return sum + Number(row?.quantity ?? 0);
                                       }, 0);
-                                      const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
-                                      const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
-                                      return (
-                                        <button
-                                          key={p.id}
-                                          type="button"
-                                          onClick={() => pickProduct(p)}
-                                          className="group flex w-[150px] shrink-0 snap-start gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                        >
-                                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
-                                            {img ? (
-                                              // eslint-disable-next-line @next/next/no-img-element
-                                              <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
-                                            ) : (
-                                              <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
-                                            )}
-                                          </div>
-                                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                            <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
-                                            <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code}</span>
-                                            <span className="flex items-center justify-between gap-1">
-                                              <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
-                                              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
-                                            </span>
-                                            <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  <div className="hidden lg:grid lg:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] lg:gap-1.5">
-                                    {items.map((p) => {
-                                      const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
-                                      const price = Number(p.variants[0]?.price ?? 0);
-                                      const locationId = station().locationId;
-                                      const totalStock = p.variants.reduce((sum, v) => {
-                                        const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
-                                        return sum + Number(row?.quantity ?? 0);
-                                      }, 0);
-                                      const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
+                                      const status = totalStock <= 0 ? "OOS" : totalStock <= 5 ? "Low Stock" : "Avail.";
                                       const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
                                       return (
                                         <button
@@ -766,7 +816,7 @@ const cartParts = useMemo(() => {
                                           </div>
                                           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                                             <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
-                                            <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code}</span>
+                                            <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
                                             <span className="flex items-center justify-between gap-1">
                                               <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
                                               <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
@@ -779,120 +829,70 @@ const cartParts = useMemo(() => {
                                   </div>
                                 </div>
                               ))}
-                              {rest.length ? (
-                                <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-                                  {rest.map(([catName, items]) => (
-                                    <div key={catName} className="min-w-0 overflow-hidden rounded-md border bg-card p-2">
-                                      <div className="mb-1.5 flex items-center gap-2">
-                                        <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">{catName}</h3>
-                                        <span className="h-px flex-1 bg-border/60" />
-                                        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
-                                      </div>
-                                      <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(120px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] lg:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
-                                        {items.map((p) => {
-                                          const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
-                                          const price = Number(p.variants[0]?.price ?? 0);
-                                          const locationId = station().locationId;
-                                          const totalStock = p.variants.reduce((sum, v) => {
-                                            const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
-                                            return sum + Number(row?.quantity ?? 0);
-                                          }, 0);
-                                          const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
-                                          const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
-                                          return (
-                                            <button
-                                              key={p.id}
-                                              type="button"
-                                              onClick={() => pickProduct(p)}
-                                              className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                            >
-                                              <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
-                                                {img ? (
-                                                  // eslint-disable-next-line @next/next/no-img-element
-                                                  <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
-                                                ) : (
-                                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
-                                                )}
-                                              </div>
-                                              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                                <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
-                                                <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
-                                                <span className="flex items-center justify-between gap-1">
-                                                  <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
-                                                  <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
-                                                </span>
-                                                <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
-                                              </div>
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : null}
                             </div>
+                          ) : null}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
+                        {catalog.map((p) => {
+                          const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
+                          const price = Number(p.variants[0]?.price ?? 0);
+                          const locationId = station().locationId;
+                          const totalStock = p.variants.reduce((sum, v) => {
+                            const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
+                            return sum + Number(row?.quantity ?? 0);
+                          }, 0);
+                          const status = totalStock <= 0 ? "OOS" : totalStock <= 5 ? "Low Stock" : "Avail.";
+                          const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => pickProduct(p)}
+                              className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                            >
+                              <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
+                                {img ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
+                                )}
+                              </div>
+                              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
+                                <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
+                                <span className="flex items-center justify-between gap-1">
+                                  <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
+                                  <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
+                                </span>
+                                <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
+                              </div>
+                            </button>
                           );
-                        }
-                        return (
-                          <div className="grid gap-1.5 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))] sm:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
-                            {catalog.map((p) => {
-                              const img = p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url || p.variants[0]?.imageUrl;
-                              const price = Number(p.variants[0]?.price ?? 0);
-                              const locationId = station().locationId;
-                              const totalStock = p.variants.reduce((sum, v) => {
-                                const row = locationId ? v.stock.find((s) => s.locationId === locationId) : v.stock[0];
-                                return sum + Number(row?.quantity ?? 0);
-                              }, 0);
-                              const status = totalStock <= 0 ? "Out of Stock" : totalStock <= 5 ? "Low Stock" : "Available";
-                              const statusCls = totalStock <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : totalStock <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
-                              return (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => pickProduct(p)}
-                                  className="group flex gap-2 overflow-hidden rounded-md border border-border/80 bg-card p-2 text-left hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                >
-                                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded border bg-muted/30">
-                                    {img ? (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={fileUrl(img)} alt="" className="h-full w-full object-cover" loading="lazy" />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">No img</div>
-                                    )}
-                                  </div>
-                                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                    <span className="truncate text-xs font-medium leading-tight">{p.name}</span>
-                                    <span className="truncate text-[10px] leading-tight text-muted-foreground">{p.code} · {p.variants.length > 1 ? `${p.variants.length} variants` : p.variants[0]?.sku ?? ""}</span>
-                                    <span className="flex items-center justify-between gap-1">
-                                      <span className="shrink-0 text-xs font-semibold tabular-nums">{moneyLabel(price)}</span>
-                                      <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium leading-none ${statusCls}`}>{status}</span>
-                                    </span>
-                                    <span className="text-[10px] tabular-nums text-muted-foreground">Stock: {totalStock}</span>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-                  
+                        })}
+                      </div>
+                    );
+                  })()}
+
                 </div>
               )}
               <button
-          type="button"
-          data-help="pos-close-shift"
-          className="mt-1.5 w-full text-[11px] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => setCloseOpen(true)}
-        >
-          Close shift
-        </button>
-        <div
-          data-help="pos-shortcuts"
-          className="mt-1.5 border-t border-dashed pt-1.5 text-center text-[10px] text-muted-foreground"
-        >
-          F2 scan · F4 customer · F8 discount · F9 hold · F10 pay · ESC clear
-        </div>
+                type="button"
+                data-help="pos-close-shift"
+                className="hidden mt-1.5 w-full text-[11px] text-muted-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:block"
+                onClick={() => setCloseOpen(true)}
+              >
+                Close shift
+              </button>
+              <div
+                data-help="pos-shortcuts"
+                className="hidden mt-1.5 border-t border-dashed pt-1.5 text-center text-[10px] text-muted-foreground lg:block"
+              >
+                F2 scan · F4 customer · F8 discount · F9 hold · F10 pay · ESC clear
+              </div>
             </section>
             <aside className="hidden min-h-0 flex-col bg-background lg:flex">
               <div className="shrink-0 border-b border-border/60 p-1.5">
@@ -915,7 +915,7 @@ const cartParts = useMemo(() => {
               <div className="shrink-0 border-t border-border/60 bg-background p-2">{posTotals()}</div>
             </aside>
           </div>
-          <div className="shrink-0 border-t border-border/60 bg-background p-1.5 lg:hidden">
+          <div className="shrink-0 border-t border-border/60 bg-background px-1.5 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom,0px))] lg:hidden">
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -1237,7 +1237,7 @@ function Matrix({
             const barcode = v.barcodes.find((b) => b.primary)?.code || v.barcodes[0]?.code || "";
             const img = v.imageUrl || product.images?.find((i) => i.isPrimary)?.url || product.images?.[0]?.url;
             const price = Number(v.price ?? 0);
-            const status = qty <= 0 ? "Out of Stock" : qty <= 5 ? "Low Stock" : "Available";
+            const status = qty <= 0 ? "OOS" : qty <= 5 ? "Low Stock" : "Avail.";
             const statusCls = qty <= 0 ? "bg-destructive/10 text-destructive border-destructive/20" : qty <= 5 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
             return (
               <button
