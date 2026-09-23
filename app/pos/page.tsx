@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { api, fileUrl } from "@/lib/api";
 import { usePOSStore, type DiscountType } from "@/lib/pos-store";
 import { dict } from "@/lib/i18n";
@@ -75,18 +76,75 @@ export default function PosPage() {
   const t = dict[store.locale];
   const { me, can } = useMe();
   const canDiscount = can("discount.apply");
+  const router = useRouter();
+  const sp = useSearchParams();
 
+  const soHandledRef = useRef(false);
   useEffect(() => {
     if (!me?.branches.length) return;
     const saved = typeof window !== "undefined" ? window.localStorage.getItem("pos_active_branch_id") : null;
-    const b = me.branches.find((x) => x.id === (store.branchId || saved)) ?? me.branches[0];
+    const st = usePOSStore.getState();
+    const b = me.branches.find((x) => x.id === (st.branchId || saved)) ?? me.branches[0];
     const r = b?.registers[0];
     if (!b || !r) return;
     const deviceId = r.devices[0]?.hardwareId ?? `REG-${r.id}`;
-    if (store.branchId !== b.id || store.registerId !== r.id || !store.deviceId) {
-      store.setStation(b.id, r.id, deviceId);
+    if (st.branchId !== b.id || st.registerId !== r.id || !st.deviceId) {
+      st.setStation(b.id, r.id, deviceId);
     }
-  }, [me, store]);
+  }, [me]);
+
+  // Handoff from Sales Order: prefill cart/customer from localStorage when ?so=convert — run once, no store dep to avoid hang
+  useEffect(() => {
+    if (sp.get("so") !== "convert") {
+      soHandledRef.current = false;
+      return;
+    }
+    if (soHandledRef.current) return;
+    soHandledRef.current = true;
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem("so_convert_payload") : null;
+    const soId = typeof window !== "undefined" ? window.localStorage.getItem("so_convert_id") : null;
+    if (!raw) {
+      router.replace("/pos");
+      return;
+    }
+    try {
+      const payload = JSON.parse(raw) as { customerId?: string | null; items: { variantId: string; qty: string; unitPrice: string; nameSnapshot?: string; skuSnapshot?: string; taxRate?: string }[] };
+      const st = usePOSStore.getState();
+      st.clear();
+      if (payload.customerId) {
+        api<{ id: string; name: string; phone: string }>(`/api/v1/customers/${payload.customerId}`).then((c) => {
+          usePOSStore.getState().setCustomer({ id: c.id, name: c.name, phone: c.phone });
+        }).catch(() => {});
+      }
+      // batch set cart in one update to avoid 50 re-renders/hang
+      const batch = payload.items.map((it) => ({
+        variantId: it.variantId,
+        productId: it.variantId,
+        name: (it as { nameSnapshot?: string }).nameSnapshot ?? it.variantId.slice(0, 8),
+        variantLabel: (it as { skuSnapshot?: string }).skuSnapshot ?? it.variantId.slice(0, 8),
+        sku: (it as { skuSnapshot?: string }).skuSnapshot ?? it.variantId.slice(0, 8),
+        unitPrice: it.unitPrice,
+        qty: Number(it.qty) || 1,
+        discountType: "flat" as const,
+        discountAmount: "0",
+        discountPercent: "0",
+        taxRate: String(it.taxRate ?? 0),
+      }));
+      if (batch.length) {
+        usePOSStore.setState({ cart: batch as ReturnType<typeof usePOSStore.getState>["cart"], checkoutKey: null });
+      }
+      if (typeof window !== "undefined") {
+        (window as unknown as { __soId?: string }).__soId = soId ?? undefined;
+      }
+      toastPos("info", "Sales order loaded — complete payment to convert");
+    } catch {}
+    router.replace("/pos");
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        window.localStorage.removeItem("so_convert_payload");
+      }, 15 * 60 * 1000);
+    }
+  }, [sp, router]);
 
   const search = useDebounced(q, 400);
   const products = useQuery({
@@ -213,6 +271,18 @@ export default function PosPage() {
     },
     onSuccess: (sale) => {
       store.setLastSale(sale.id, sale.invoiceNumber);
+      // If this sale was converted from a Sales Order, link it
+      const soId = typeof window !== "undefined" ? (window as unknown as { __soId?: string }).__soId ?? window.localStorage.getItem("so_convert_id") : null;
+      if (soId) {
+        api(`/api/v1/commerce/sales-orders/${soId}/convert`, { method: "POST", body: JSON.stringify({ saleId: sale.id }) }).then(() => {
+          toastPos("success", `Order ${soId.slice(-6)} → ${sale.invoiceNumber}`);
+        }).catch(() => {});
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem("so_convert_payload");
+          window.localStorage.removeItem("so_convert_id");
+          (window as unknown as { __soId?: string }).__soId = undefined;
+        }
+      }
       store.clear();
       setPayOpen(false);
       setCash("");
