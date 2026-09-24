@@ -234,10 +234,20 @@ const DRAFTS: Draft[] = [
   },
   {
     href: "/cash-flow",
-    blurb: "Money in vs money out for today.",
-    canDo: ["See cash movement for the selected day"],
-    next: [{ href: "/daily-closing", label: "Daily closing", permission: "finance.view" }],
-    keywords: ["cash"],
+    blurb: "Actual money movement for the selected range — Summary cards or Charts. Return ≠ refund: refunds are separate cash-outs from PaymentTransaction.",
+    canDo: [
+      "Toggle [Summary] vs [Charts] near date filters — same From→To range: Summary = Total Inflow/Outflow/Net + Money In/Out cards; Charts = Trend + Breakdowns + Method bars",
+      "Date presets: Today / Yesterday / This Week / This Month / Custom (From→To). Trend is one point per day; single-day shows daily totals. Reuses GET /api/v1/finance/cash-flow?from=&to=",
+      "Money In = Sales Collected (PaymentTransaction CAPTURED) + Dues Collected (Ledger IN) + Other Income. Money Out = Expenses (POSTED) + Supplier Paid (Ledger OUT) + Refunds (REFUNDED/PARTIALLY_REFUNDED) — never subtract returns from Sale.total",
+      "Refunds are separate: Sale 10k + refund 3k = net +7k. Return without refund = no outflow. Refund method (Cash/Card/bKash/Nagad) preserved and grouped by actual refund payment",
+      "Charts: Trend (Inflow emerald / Outflow rose / Net sky), Money In donut (Sales/Dues/Income), Money Out donut (Expenses/Supplier/Refunds), Method bar (Money In vs Out per method) — tooltips show exact ৳ values",
+      "Branch-scoped + businessDate filtered; Ledger payments and sales branch-filtered, refunds via SaleReturn proxy (see daily closing for EOD lock)",
+    ],
+    next: [
+      { href: "/daily-closing", label: "Daily closing", permission: "finance.view" },
+      { href: "/profit-loss", label: "P&L (revenue vs profit)", permission: "report.finance" },
+    ],
+    keywords: ["cash", "charts", "trend", "breakdown", "method", "refunds", "inflow", "outflow", "net"],
   },
   {
     href: "/profit-loss",
