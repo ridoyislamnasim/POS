@@ -177,14 +177,32 @@ export function SendSmsButton({
   target,
   size = "xs",
   label = "SMS",
+  iconOnly = false,
 }: {
   target: SendSmsTarget;
   size?: "xs" | "sm";
   label?: string;
+  iconOnly?: boolean;
 }) {
   const { can } = useMe();
   const [open, setOpen] = useState(false);
   if (!can("sms.send")) return null;
+  if (iconOnly) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Send SMS"
+          title="Send SMS"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+        </button>
+        <SendSmsDialog open={open} target={open ? target : null} onClose={() => setOpen(false)} />
+      </>
+    );
+  }
   return (
     <>
       <Button type="button" variant="outline" size={size} onClick={() => setOpen(true)}>

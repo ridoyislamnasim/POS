@@ -24,6 +24,7 @@ export function DocumentActions({
   preview = false,
   className,
   compact: _compact = true,
+  iconOnly = false,
 }: {
   type: PosDocumentType;
   id: string;
@@ -32,6 +33,7 @@ export function DocumentActions({
   preview?: boolean;
   className?: string;
   compact?: boolean;
+  iconOnly?: boolean;
 }) {
   const [busy, setBusy] = useState<"receipt" | "invoice" | "pdf" | "preview" | null>(null);
   const [openPreview, setOpenPreview] = useState(false);
@@ -53,6 +55,57 @@ export function DocumentActions({
 
   const preparing =
     busy === "receipt" ? "Preparing receipt…" : busy === "invoice" ? "Preparing invoice…" : busy === "pdf" ? "Preparing PDF…" : busy === "preview" ? "Preparing…" : null;
+
+  if (iconOnly) {
+    return (
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              aria-label="Print"
+              title={preparing ?? "Print"}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border bg-card text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[11.5rem]">
+            <DropdownMenuItem disabled={Boolean(busy)} onSelect={() => run("receipt")}>
+              <Receipt className="h-3.5 w-3.5" />
+              Thermal Receipt
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={Boolean(busy)} onSelect={() => run("invoice")}>
+              <FileText className="h-3.5 w-3.5" />
+              A4 Invoice
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={Boolean(busy)} onSelect={() => run("pdf")}>
+              <Download className="h-3.5 w-3.5" />
+              Download PDF
+            </DropdownMenuItem>
+            {preview ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={Boolean(busy)} onSelect={() => run("preview")}>
+                  Preview
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Dialog
+          open={openPreview}
+          title={number ? `Print preview · ${number}` : "Print preview"}
+          description="Thermal preview matches the POS receipt. A4 preview matches the invoice and PDF."
+          size="full"
+          onClose={() => setOpenPreview(false)}
+        >
+          {openPreview ? <DocumentLivePreview type={type} id={id} /> : null}
+        </Dialog>
+      </>
+    );
+  }
 
   return (
     <>
