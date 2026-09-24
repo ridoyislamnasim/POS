@@ -36,6 +36,9 @@ type ReceiveLine = {
   originalRetailPrice?: string;
   originalWholesalePrice?: string;
   stockQty?: string;
+  // Phase-1 WAC context (variant-isolated, source is Stock.unitCost)
+  currentWAC?: string;
+  currentSellingPrice?: string;
 };
 
 type PODetail = {
@@ -124,6 +127,9 @@ export default function ReceivePurchasePage() {
         const retail = it.variant.retailPrice ?? it.variant.price ?? "";
         const wholesale = it.variant.wholesalePrice ?? "";
         const stockQty = (it.variant as unknown as { stock?: { quantity: string }[] }).stock?.[0]?.quantity ?? "";
+        // currentWAC is Stock.unitCost-synced ProductVariant.cost (do not confuse with PO unitCost)
+        const currentWAC = String(it.variant.cost ?? "");
+        const currentSelling = String(it.variant.price ?? retail ?? "");
         return {
           variantId: it.variantId,
           productId: it.variant.product?.id ?? it.variantId,
@@ -146,6 +152,8 @@ export default function ReceivePurchasePage() {
           originalRetailPrice: String(retail ?? ""),
           originalWholesalePrice: String(wholesale ?? ""),
           stockQty,
+          currentWAC,
+          currentSellingPrice: currentSelling,
         };
       }).filter((l) => Number(l.remainingQty) > 0);
       setLines(newLines);
@@ -160,6 +168,8 @@ export default function ReceivePurchasePage() {
     const stockQty = variant.stock?.[0]?.quantity ?? "";
     const retailDef = String(variant.retailPrice ?? variant.price ?? "");
     const wholesaleDef = String(variant.wholesalePrice ?? "");
+    const currentWAC = String(variant.cost ?? "");
+    const currentSelling = String(variant.price ?? retailDef ?? "");
     if (lines.some((l) => l.variantId === variant.id)) {
       setLines((prev) => prev.map((l) => (l.variantId === variant.id ? { ...l, qty: String(Number(l.qty) + 1) } : l)));
       return;
@@ -184,6 +194,8 @@ export default function ReceivePurchasePage() {
         originalRetailPrice: retailDef,
         originalWholesalePrice: wholesaleDef,
         stockQty,
+        currentWAC,
+        currentSellingPrice: currentSelling,
       },
     ]);
   }
@@ -453,6 +465,41 @@ export default function ReceivePurchasePage() {
                             {l.retailPrice !== l.originalRetailPrice || l.wholesalePrice !== l.originalWholesalePrice ? <span className="rounded bg-amber-500 px-1 py-0 text-[10px] text-white">edited</span> : <span className="rounded bg-muted px-1 py-0 text-[10px]">inherited</span>}
                           </div>
                         </div>
+                        {(() => {
+                          const currentWAC = Number(l.currentWAC || 0);
+                          const currentSelling = Number(l.currentSellingPrice || l.retailPrice || 0);
+                          const stockQty = Number(l.stockQty || 0);
+                          const incomingCost = Number(l.unitCost || 0);
+                          const incomingQty = Number(l.qty || 0);
+                          const newQty = stockQty + incomingQty;
+                          const newWAC = newQty > 0 ? (stockQty * currentWAC + incomingQty * incomingCost) / newQty : incomingCost;
+                          const retailNum = Number(l.retailPrice || currentSelling) || 0;
+                          const discountNum = Number(l.discount || 0);
+                          const sellingPrice = retailNum > 0 ? retailNum - (retailNum * discountNum / 100) : currentSelling;
+                          const profitPerUnit = sellingPrice - newWAC;
+                          const margin = sellingPrice > 0 ? (profitPerUnit / sellingPrice * 100) : 0;
+                          const isStockKnown = stockQty > 0 || currentWAC > 0;
+                          return (
+                            <div className="mt-2 grid gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5 text-[11px] leading-tight">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-medium">WAC:</span>
+                                <span className="rounded bg-white px-1.5 py-0.5 font-mono tabular-nums">Now {moneyLabel(currentWAC)} {isStockKnown ? `· ${stockQty} pcs` : "· new"}</span>
+                                <span>→</span>
+                                <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono font-semibold tabular-nums text-primary">New {moneyLabel(newWAC)}</span>
+                                <span className="rounded bg-sky-50 px-1.5 py-0.5 text-sky-700">Stock after {newQty} pcs</span>
+                                {Math.abs(newWAC - currentWAC) > 0.01 && isStockKnown ? <span className={`rounded px-1.5 py-0.5 font-medium ${newWAC > currentWAC ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{newWAC > currentWAC ? "↑ cost up" : "↓ cost down"}</span> : null}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-medium">Selling:</span>
+                                <span className="rounded bg-white px-1.5 py-0.5 font-mono tabular-nums">{moneyLabel(sellingPrice)}</span>
+                                <span className="text-muted-foreground">(Retail {moneyLabel(retailNum)}{discountNum > 0 ? ` - ${discountNum}%` : ""})</span>
+                                <span className={`rounded px-1.5 py-0.5 font-semibold ${profitPerUnit >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-destructive/10 text-destructive border border-destructive/20"}`}>{profitPerUnit >= 0 ? `Profit +${moneyLabel(profitPerUnit)}` : `Loss ${moneyLabel(profitPerUnit)}`} · {margin.toFixed(1)}%</span>
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">Cost variant-isolated — other variants unchanged</span>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">Stock.unitCost is source; ProductVariant.cost syncs to New WAC; selling unchanged unless you edit Retail/Wholesale. Variant-wise.</div>
+                            </div>
+                          );
+                        })()}
                         {isOver ? <div className="mt-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive">Over-receiving: remaining {l.remainingQty}, tried {l.qty}.</div> : null}
                       </motion.div>
                     );

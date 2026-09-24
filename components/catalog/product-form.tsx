@@ -796,6 +796,23 @@ const loss = cost > finalSellingPrice ? cost - finalSellingPrice : 0;
               <p className="text-[10px] leading-tight text-muted-foreground">Auto Fill is ON — the first value you type copies to empty pricing fields. All fields stay independently editable.</p>
             ) : null}
             {variantPriceError(v.id) ? <p className="text-[11px] text-destructive">{variantPriceError(v.id)}</p> : null}
+            {(() => {
+              const sellingNum = Number(calcFinalSellingPrice(v.retail, v.discount)) || 0;
+              const costNum = Number(v.cost || 0);
+              const profitNum = sellingNum - costNum;
+              const marginNum = sellingNum > 0 ? (profitNum / sellingNum) * 100 : 0;
+              const isLoss = profitNum < 0;
+              return (
+                <div className="flex flex-wrap items-center gap-1.5 rounded-md border bg-white px-2 py-1.5 text-[11px] dark:bg-zinc-900">
+                  <span className="font-medium text-muted-foreground">Selling {sellingNum.toFixed(2)}</span>
+                  <span className="text-muted-foreground">− Cost {costNum.toFixed(2)}</span>
+                  <span className={`rounded px-1.5 py-0.5 font-semibold tabular-nums ${isLoss ? "bg-destructive/10 text-destructive border border-destructive/20" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
+                    {isLoss ? `Loss ${profitNum.toFixed(2)}` : `Profit +${profitNum.toFixed(2)}`} · {marginNum.toFixed(1)}%
+                  </span>
+                  <span className="rounded bg-muted px-1 py-0 text-[10px] text-muted-foreground">Current selling · Cost = WAC ref · variant-isolated</span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Inventory — variant-wise: Min/Reorder + Opening per outlet */}
